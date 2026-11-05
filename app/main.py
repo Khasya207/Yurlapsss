@@ -218,6 +218,8 @@ class YurLaps:
         while not self._stop.is_set():
             try:
                 self.engine.tick()
+                if self.ctx._race is not None:
+                    self.ctx.race.cek_waktu()
             except Exception as exc:  # pragma: no cover
                 self.engine.log("error", f"tick: {exc}")
             self._stop.wait(1.0)

@@ -513,7 +513,7 @@ def check_app_offline() -> bool:
     - UI menyimpan data club di localStorage (harus SQLite lewat API),
     - state sesi disimpan di handler HTTP sehingga hilang tiap permintaan,
     - pesan tombol Unggah menjanjikan pengiriman padahal belum ada jaringan,
-    - umpan balik tombol uji memakai jam komputer (bukan waktu lap wajar).
+    - pencatatan race kehilangan timestamp decoder atau acuan GO.
     """
     import re as _re
     ok = True
@@ -521,7 +521,7 @@ def check_app_offline() -> bool:
         "app/club.py": ["class ClubStore", "def simpan_race", "def races",
                         "BEGIN IMMEDIATE", "AS n_race"],
         "app/race.py": ["class RaceEngine", "def catat", "def klasemen",
-                        "def simpan", "paksa_lap_ms"],
+                        "def simpan", "decoder_ts", "start_decoder_ts"],
         "app/static/quickrace.html": ['id="cdLayer"', 'id="modalSave"',
                                       'id="view-history"', 'id="modalPeserta"',
                                       'id="view-track"', "quickrace.js"],

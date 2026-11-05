@@ -54,7 +54,7 @@ a = Analysis(
     runtime_hooks=[],
     # Jendela aplikasi ditangani Electron: Tk, webview, pythonnet dibuang.
     excludes=[
-        "tkinter", "_tkinter", "PIL", "Pillow",
+        "tkinter", "_tkinter",
         "webview", "clr", "pythonnet", "clr_loader", "System",
         "matplotlib", "numpy", "pandas", "scipy",
         "test", "unittest",
