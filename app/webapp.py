@@ -90,6 +90,20 @@ class AppContext:
         self.decoder_manager = None
         self.updater = None
         self.start_time = time.time()
+        previous_event = engine.on_event
+        def route_event(event):
+            if event.get("kind") == "passing":
+                self.race.catat(event["transponder_id"],
+                                decoder_ts=event.get("decoder_timecode"),
+                                rssi=event.get("rssi"), hit_count=event.get("hit_count"),
+                                dur_us=event.get("pass_duration_us"))
+            elif event.get("kind") == "noise":
+                self.race.observe_clock(event.get("timecode"))
+            elif event.get("kind") == "clock_reset":
+                self.race.clock_reset()
+            if previous_event:
+                previous_event(event)
+        engine.on_event = route_event
 
     @property
     def club(self):
@@ -221,6 +235,10 @@ def make_handler(ctx: AppContext):
                 if ctx.updater is not None:
                     snap["update"] = ctx.updater.info()
                 # nilai yang dipakai halaman Decoder (jangan menebak di UI)
+                names = {tp: m.get("nick") or m["name"] for m in ctx.club.members()
+                         if m.get("status") == "active" for tp in m["transponder"]}
+                snap["decoder"]["passes"] = [dict(p, driver=names.get(p["transponder_id"], p.get("driver", "")))
+                                              for p in snap["decoder"]["passes"]]
                 snap["decoder"]["gain"] = cfg.decoder_gain
                 snap["decoder"]["name"] = "YurLaps Decoder"
                 snap["settings"].update({
@@ -282,6 +300,15 @@ def make_handler(ctx: AppContext):
             if path == "/api/races":
                 tid = (qs.get("track_id") or [None])[0]
                 return self._json({"ok": True, "races": ctx.club.races(tid)})
+
+            if path.startswith("/api/races/") and path.endswith("/pdf"):
+                rid = path[len("/api/races/"):-4]
+                race = ctx.club.race(rid)
+                if not race:
+                    return self._err(404, "Sesi tidak ditemukan")
+                from .race_report import render_pdf
+                return self._send(200, render_pdf(race), "application/pdf",
+                                  {"Content-Disposition": 'attachment; filename="YurLaps-race.pdf"'})
 
             if path.startswith("/api/races/"):
                 rid = path[len("/api/races/"):]
@@ -396,6 +423,20 @@ def make_handler(ctx: AppContext):
             data = self._body_json()
 
             # ---------------- Quick Race (offline) ----------------
+            if path == "/api/members/import":
+                try:
+                    count = ctx.club.import_members(data.get("members"))
+                except (ValueError, TypeError) as exc:
+                    return self._err(400, str(exc))
+                return self._json({"ok": True, "count": count, "members": ctx.club.members()})
+
+            if path == "/api/member":
+                try:
+                    member = ctx.club.save_member(data)
+                except (ValueError, TypeError) as exc:
+                    return self._err(400, str(exc))
+                return self._json({"ok": True, "member": member, "members": ctx.club.members()})
+
             if path == "/api/race/track":
                 try:
                     ctx.race.set_track(data.get("track_id") or "")
@@ -404,6 +445,8 @@ def make_handler(ctx: AppContext):
                 return self._json({"ok": True, "race": ctx.race.snapshot()})
 
             if path == "/api/race/cfg":
+                if ctx.race.status in ("live", "countdown"):
+                    return self._err(409, "Pengaturan race tidak bisa diubah selama sesi berjalan")
                 ctx.race.set_cfg(data)
                 return self._json({"ok": True, "race": ctx.race.snapshot()})
 
@@ -429,18 +472,7 @@ def make_handler(ctx: AppContext):
                 return self._json({"ok": True, "race": snap})
 
             if path == "/api/race/pass":
-                tid = data.get("transponder")
-                if tid in (None, ""):
-                    return self._err(400, "transponder wajib")
-                ctx.race.cek_waktu()
-                # simulasi: khusus tombol uji UI, bukan masukan decoder
-                uji = 8600 + (int(time.time() * 1000) % 2000) if data.get("simulasi") else None
-                hasil = ctx.race.catat(int(tid),
-                                        rssi=float(data.get("rssi") or -52.0),
-                                        dur_us=data.get("dur_us"),
-                                        paksa_lap_ms=uji)
-                return self._json({"ok": True, "hasil": hasil,
-                                   "race": ctx.race.snapshot()})
+                return self._err(409, "Pencatatan race hanya menerima lintasan OpenStint.")
 
             if path == "/api/race/finish":
                 try:
@@ -489,9 +521,7 @@ def make_handler(ctx: AppContext):
                 return self._json({"ok": ok, "tracks": ctx.club.tracks()})
 
             if path == "/api/tracks/sync":
-                n = ctx.club.mark_tracks_synced()
-                return self._err(409, f"{n} track ditandai siap sinkron. "
-                                      "Belum ada koneksi ke website.")
+                return self._err(409, "Mode offline: track tetap lokal. Sinkron website belum aktif.")
 
             if path == "/api/preset":
                 try:
@@ -531,6 +561,8 @@ def make_handler(ctx: AppContext):
                 return self._json({"ok": True, "state": engine.snapshot()})
 
             if path == "/api/settings":
+                if ctx.race.status in ("live", "countdown") and any(k.startswith("decoder_") or k in ("manage_decoder", "zmq_endpoint") for k in data):
+                    return self._err(409, "Pengaturan decoder terkunci selama sesi berjalan")
                 allowed = {
                     "track_name": str, "event_name": str, "zmq_endpoint": str,
                     "idle_split_seconds": int, "min_lap_seconds": float,
@@ -609,6 +641,9 @@ def make_handler(ctx: AppContext):
                 engine.device_info = info.to_dict()
                 engine.log("info", f"Perangkat: {info.message}")
                 return self._json({"ok": True, "device": info.to_dict()})
+
+            if path in ("/api/decoder/gain", "/api/decoder/restart") and ctx.race.status in ("live", "countdown"):
+                return self._err(409, "Selesaikan sesi sebelum mengubah gain atau restart decoder.")
 
             if path == "/api/decoder/gain":
                 # Ubah gain tuner -> simpan -> restart openstint.exe (debounce).

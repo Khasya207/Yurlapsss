@@ -20,6 +20,9 @@ Aturan yang dipegang:
 from __future__ import annotations
 
 import json
+import math
+import uuid
+import threading
 import sqlite3
 import time
 from pathlib import Path
@@ -27,7 +30,7 @@ from typing import Optional
 
 from .config import default_data_dir
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 PRAGMA journal_mode=WAL;
@@ -45,7 +48,7 @@ CREATE TABLE IF NOT EXISTS track (
     id          TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     addr        TEXT,
-    width_m     REAL,                 -- keliling loop, untuk km/h
+    width_m     REAL,                 -- legacy track length; never used for speed
     note        TEXT,
     best_ms     INTEGER,
     holder      TEXT,
@@ -151,6 +154,7 @@ class ClubStore:
     """Akses SQLite untuk club, track, member, preset, dan hasil balapan."""
 
     def __init__(self, path: Optional[Path] = None):
+        self.lock = threading.RLock()
         self.path = Path(path) if path else default_data_dir() / "yurlaps_club.sqlite3"
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
@@ -178,6 +182,12 @@ class ClubStore:
             if v < 1:
                 # bentuk awal; tabel sudah dibuat oleh SCHEMA
                 pass
+            if v < 2:
+                # width_m in v1 meant track circumference: never reinterpret it
+                # as cable spacing. Operator must enter the real loop width.
+                conn.execute("ALTER TABLE track ADD COLUMN loop_width_m REAL")
+                conn.execute("ALTER TABLE race ADD COLUMN result_json TEXT")
+                conn.execute("ALTER TABLE member ADD COLUMN source TEXT DEFAULT 'local'")
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
             conn.execute("COMMIT")
         except Exception:
@@ -193,18 +203,10 @@ class ClubStore:
         now = time.time()
         if not c.execute("SELECT 1 FROM club WHERE id = 1").fetchone():
             c.execute("INSERT INTO club (id, club_id, name, role, synced_at) "
-                      "VALUES (1, 'club-medan', 'Medan RC', 'leader', NULL)")
+                      "VALUES (1, 'club-local', 'Club lokal', 'leader', NULL)")
         if not c.execute("SELECT 1 FROM track LIMIT 1").fetchone():
-            for tid, name, addr, w, note, best, holder, synced in CONTOH_TRACK:
-                c.execute("INSERT INTO track (id, name, addr, width_m, note, best_ms, holder,"
-                          " synced, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                          (tid, name, addr, w, note, best, holder, synced, now))
-        if not c.execute("SELECT 1 FROM member LIMIT 1").fetchone():
-            for mid, name, nick, kelas, mobil, role, status, tps in CONTOH_MEMBER:
-                c.execute("INSERT INTO member (id, name, nick, kelas, mobil, role, status,"
-                          " transponder, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
-                          (mid, name, nick, kelas, mobil, role, status,
-                           json.dumps(tps), now))
+            c.execute("INSERT INTO track (id,name,synced,updated_at) VALUES (?,?,0,?)",
+                      ("t-local", "Track lokal", now))
         if not c.execute("SELECT 1 FROM preset LIMIT 1").fetchone():
             for pid, name, target, value, rank, start, cd, sound in CONTOH_PRESET:
                 c.execute("INSERT INTO preset (id, name, target, value, rank, start_mode,"
@@ -270,6 +272,16 @@ class ClubStore:
                 "INSERT INTO track (id, name, addr, width_m, note, best_ms, holder,"
                 " synced, updated_at) VALUES (?,?,?,?,?,NULL,NULL,0,?)",
                 (tid, nama, data.get("addr") or "", lebar, data.get("note") or "", now))
+        width = data.get("loop_width_m")
+        try:
+            width = float(width) if width not in (None, "") else None
+        except (TypeError, ValueError):
+            self._conn.rollback()
+            raise ValueError("Jarak antarkabel loop harus angka dalam meter")
+        if width is not None and (not math.isfinite(width) or width <= 0):
+            self._conn.rollback()
+            raise ValueError("Jarak antarkabel loop harus lebih dari nol")
+        self._conn.execute("UPDATE track SET loop_width_m=? WHERE id=?", (width, tid))
         self._conn.commit()
         return self.track(tid) or {}
 
@@ -297,6 +309,58 @@ class ClubStore:
             self._conn.commit()
 
     # -- member ----------------------------------------------------------
+    def member_for_transponder(self, transponder):
+        return next((m for m in self.members() if m.get("status") == "active"
+                     and transponder in m.get("transponder", [])), None)
+
+    def save_member(self, data, *, _commit=True, _source=None):
+        with self.lock:
+            name = str(data.get("name") or "").strip()
+            if not name:
+                raise ValueError("Nama pembalap wajib diisi")
+            mid = str(data.get("id") or "m-" + uuid.uuid4().hex)
+            raw = data.get("transponder", [])
+            if isinstance(raw, str):
+                raw = raw.replace(",", " ").split()
+            try:
+                ids = [int(x) for x in raw]
+            except (TypeError, ValueError):
+                raise ValueError("ID transponder harus bilangan bulat")
+            if any(x < 0 or x > 4294967295 for x in ids) or len(ids) != len(set(ids)):
+                raise ValueError("ID transponder tidak sah atau ganda")
+            members = self.members()
+            for m in members:
+                if m["id"] != mid and set(m["transponder"]) & set(ids):
+                    raise ValueError("Transponder sudah terdaftar pada " + m["name"])
+            old = next((m for m in members if m["id"] == mid), {})
+            source = old.get("source") or _source or "local"
+            self._conn.execute(
+                "INSERT INTO member (id,name,nick,kelas,mobil,role,status,transponder,updated_at,source) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET "
+                "name=excluded.name,nick=excluded.nick,kelas=excluded.kelas,mobil=excluded.mobil,"
+                "transponder=excluded.transponder,updated_at=excluded.updated_at",
+                (mid,name,str(data.get("nick") or ""),str(data.get("kelas") or ""),
+                 str(data.get("mobil") or ""),old.get("role", "member"),
+                 old.get("status", "active"),json.dumps(ids),time.time(),source))
+            if _commit:
+                self._conn.commit()
+            return next(m for m in self.members() if m["id"] == mid)
+
+    def import_members(self, rows):
+        if not isinstance(rows, list) or len(rows) > 2000:
+            raise ValueError("Gunakan array JSON member, maksimal 2000 baris")
+        identifiers = set()
+        with self.lock, self._conn:
+            for row in rows:
+                if not isinstance(row, dict) or not row.get("id"):
+                    raise ValueError("Setiap member impor harus memiliki id dan name")
+                mid = "web-" + str(row["id"])
+                if mid in identifiers:
+                    raise ValueError("ID member ganda dalam berkas impor")
+                identifiers.add(mid)
+                self.save_member(dict(row, id=mid), _commit=False, _source="website")
+        return len(rows)
+
     def members(self) -> list[dict]:
         rows = self._conn.execute(
             "SELECT * FROM member ORDER BY status ASC, name COLLATE NOCASE").fetchall()
@@ -382,6 +446,7 @@ class ClubStore:
                     " rssi, dur_us, skip) VALUES (?,?,?,?,?,?,?,0)",
                     (rid, d.get("transponder"), seq, int(lap),
                      race.get("ended_at") or race["started_at"], None, None))
+        c.execute("UPDATE race SET result_json=? WHERE id=?", (json.dumps(race, ensure_ascii=False), rid))
         c.commit()
         return rid
 
@@ -404,6 +469,10 @@ class ClubStore:
                 d["cfg"] = json.loads(d.get("cfg") or "{}")
             except ValueError:
                 d["cfg"] = {}
+            saved = json.loads(d.get("result_json") or "null")
+            d.pop("result_json", None)
+            if saved:
+                d["elapsed_ms"] = max(0, (saved.get("end_decoder_ts") or 0) - (saved.get("start_decoder_ts") or 0))
             out.append(d)
         return out
 
@@ -412,6 +481,8 @@ class ClubStore:
         if not r:
             return None
         d = dict(r)
+        if d.get("result_json"):
+            return json.loads(d["result_json"])
         d["cfg"] = json.loads(d.get("cfg") or "{}")
         d["drivers"] = []
         for row in self._conn.execute(
@@ -420,7 +491,10 @@ class ClubStore:
             dd["laps"] = [x[0] for x in self._conn.execute(
                 "SELECT lap_ms FROM race_lap WHERE race_id = ? AND transponder = ?"
                 " ORDER BY seq", (rid, dd["transponder"]))]
+            dd["kmh"] = None
             d["drivers"].append(dd)
+        from .race_results import result_rows
+        d["drivers"] = result_rows(d["drivers"], d["cfg"])
         return d
 
     def tandai_terkirim(self, rid: str, remote_id: Optional[str] = None) -> bool:
@@ -453,3 +527,18 @@ class ClubStore:
             self._conn.close()
         except Exception:
             pass
+
+
+# The decoder callback and ThreadingHTTPServer share this connection.
+from functools import wraps as _wraps
+
+def _locked(method):
+    @_wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self.lock:
+            return method(self, *args, **kwargs)
+    return wrapped
+
+for _name, _method in list(vars(ClubStore).items()):
+    if callable(_method) and not _name.startswith("_"):
+        setattr(ClubStore, _name, _locked(_method))
