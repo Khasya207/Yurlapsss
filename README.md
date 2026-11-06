@@ -8,7 +8,7 @@ transponder** dan **sinkronisasi hasil ke website online**.
 
 ![Papan lap YurLaps](docs/screenshot-dashboard.png)
 
-![Panel perangkat](docs/screenshot-perangkat.png)
+![Panel decoder](docs/screenshot-decoder.png)
 
 ---
 
