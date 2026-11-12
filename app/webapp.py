@@ -738,6 +738,9 @@ def make_handler(ctx: AppContext):
                     event_id = str(data.get("event_id") or "")
                     if path == "/api/event/status":
                         return self._json({"ok": True, "event": store.set_status(event_id, data.get("status"))})
+                    if path == "/api/event/competition/config":
+                        return self._json({"ok": True, "event": store.configure_competition(
+                            event_id, str(data.get("class_id") or ""), data)})
                     if path == "/api/event/resolve":
                         event = store.resolve_sync_conflict(event_id, data.get("choice"))
                         ctx.cloud.wake.set()
@@ -762,6 +765,8 @@ def make_handler(ctx: AppContext):
                     if path == "/api/event/stage/move":
                         return self._json({"ok": True, "event": store.move_stage(
                             event_id, str(data.get("stage_id") or ""), data.get("direction"))})
+                    if path == "/api/event/stage/generate":
+                        return self._json({"ok": True, "stages": store.generate_round(event_id, data)})
                     if path == "/api/event/stage/start":
                         stage_id = str(data.get("stage_id") or "")
                         event, stage = store.stage(event_id, stage_id)

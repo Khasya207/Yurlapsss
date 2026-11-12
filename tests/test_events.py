@@ -52,6 +52,38 @@ class EventTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "melewati"):
             self.store.move_stage(self.event["id"], first["id"], "up")
 
+    def test_competition_recipe_and_grouped_rounds(self):
+        event_id = self.event["id"]
+        configured = self.store.configure_competition(event_id, self.class_id, {
+            "name": "Buggy Pro", "group_min": 2, "group_max": 2,
+            "qualifier_rounds": 2, "final_rounds": 1,
+            "qualifier_target": 240, "final_target": 300})
+        self.assertEqual(configured["classes"][0]["name"], "Buggy Pro")
+        self.assertEqual(configured["classes"][0]["config"]["qualifier_rounds"], 2)
+        for member, tp in ((self.alice, 101), (self.bob, 201)):
+            entry = self.store.add_entry(event_id, {"class_id": self.class_id,
+                "member_id": member["id"], "transponder": tp})
+            self.store.set_entry(event_id, entry["id"], approved=True)
+        stages = self.store.generate_round(event_id, {"class_id": self.class_id,
+            "kind": "qualifying", "name": "Qualifier", "rounds": 2,
+            "group_max": 2, "cfg": {"target": "time", "value": 240,
+            "target_time_ms": 240000, "start_mode": "staggered", "rank": "result"}})
+        self.assertEqual([s["name"] for s in stages],
+                         ["Qualifier R1 · Grup A", "Qualifier R2 · Grup A"])
+        self.assertEqual([s["sequence"] for s in stages], [1, 2])
+        self.assertEqual(len(stages[0]["entry_ids"]), 2)
+
+    def test_schedule_generation_rejects_invalid_input_without_partial_stages(self):
+        event_id = self.event["id"]
+        with self.assertRaisesRegex(ValueError, "Setujui peserta"):
+            self.store.generate_round(event_id, {"class_id": self.class_id,
+                "kind": "final", "name": "Final", "rounds": 2, "group_max": 2})
+        self.assertEqual(self.store.get(event_id)["stages"], [])
+        with self.assertRaisesRegex(ValueError, "Minimum grup"):
+            self.store.configure_competition(event_id, self.class_id,
+                {"group_min": 12, "group_max": 4})
+        self.assertNotIn("config", self.store.get(event_id)["classes"][0])
+
     def test_approval_checkin_and_stage_entry_validation(self):
         alice = self.store.add_entry(self.event["id"], {"class_id": self.class_id,
             "member_id": self.alice["id"], "transponder": 101})

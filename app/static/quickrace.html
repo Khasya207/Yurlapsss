@@ -123,6 +123,28 @@
   .event-board td:first-child{font-weight:600;color:var(--ink)}
   .event-muted{color:var(--muted);font-size:12px}.event-status{font-size:11px;font-weight:700;color:var(--blue)}
   @media(max-width:900px){.event-layout{grid-template-columns:1fr}.event-form{grid-template-columns:1fr}}
+  .event-workflow{display:flex;gap:0;margin:14px 0 18px;border:1px solid #cbd6dc;border-radius:10px;overflow:auto;background:#f8fafb}
+  .event-workflow button{display:flex;align-items:center;gap:9px;flex:1;min-width:130px;padding:12px 14px;border-right:1px solid #d9e1e5;text-align:left;color:#61737d;font-size:12px;font-variant-numeric:tabular-nums}
+  .event-workflow button:last-child{border-right:0}.event-workflow button b{font-size:13px;color:#253e4a;font-weight:650}
+  .event-workflow button.on{background:#123c4e;color:#86d6e5}.event-workflow button.on b{color:#fff}
+  .event-workspace{display:grid;grid-template-columns:220px minmax(0,1fr);align-items:start;gap:16px}
+  .event-rail{background:#edf2f4;border:1px solid #d8e2e6;border-radius:10px;padding:10px;position:sticky;top:16px}
+  .event-rail-head{display:flex;justify-content:space-between;align-items:center;margin:5px 4px 9px;color:#345361;font-size:12px;letter-spacing:.02em}
+  .event-rail .event-list{margin-bottom:13px}.event-rail .event-item{border-radius:7px;padding:10px 11px;background:transparent}
+  .event-rail .event-item.on{background:#fff;border-color:#4d95ab;box-shadow:inset 3px 0 #147c99}
+  .event-main{min-width:0}.event-main h2{font-size:18px;margin:0 0 7px}.event-main h3{margin:0 0 10px}
+  .event-main .card{margin-bottom:14px}.event-hero{display:flex;justify-content:space-between;gap:22px;align-items:start;border-top:3px solid #1b7894}
+  .event-hero h2{font-size:22px;margin:4px 0 9px}.event-hero .actions{margin-top:13px}
+  .event-kicker{font-size:10px;font-weight:800;letter-spacing:.12em;color:#416b7a}
+  .event-editor summary{cursor:pointer;font-weight:700;color:#164d63;list-style:none;padding:2px 0}.event-editor summary::before{content:'＋';display:inline-block;margin-right:8px}.event-editor[open] summary{margin-bottom:16px}
+  .event-competition-summary{display:flex;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #e1e8eb}.event-competition-summary:first-child{border-top:0}
+  .event-competition-summary span,.event-competition small{font-size:12px;color:#526c79}
+  .event-competition{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #e0e8eb;padding:14px 0}
+  .event-competition b,.event-competition small{display:block}.event-competition .actions{justify-content:flex-end}
+  .event-section-head{margin-bottom:10px}.event-config-form{border-top:1px solid #d5e1e5;padding-top:18px;margin-top:4px}
+  .event-config-form h3{padding:10px 0 4px;border-bottom:1px solid #d5e1e5;color:#123c4e}
+  #eventError{padding:11px 13px;background:#fff2ed;color:#8e3522;border:1px solid #e8aa96;border-radius:7px;margin-bottom:14px}
+  @media(max-width:920px){.event-workspace{grid-template-columns:1fr}.event-rail{position:static}.event-rail .event-list{display:flex;overflow:auto}.event-rail .event-item{min-width:180px}.event-competition{align-items:start;flex-direction:column}}
 
   /* ---------- track + preset bar ---------- */
   .barrow{display:flex;align-items:center;gap:13px;background:#fff;border:1px solid var(--line);
@@ -594,48 +616,55 @@
 
     <!-- ==================== EVENT ==================== -->
     <div class="page" id="view-event" style="display:none">
-      <div class="head"><div><h1>Event</h1><div class="lead">Pendaftaran, jadwal sesi, timing, dan hasil dalam satu tempat.</div></div><div class="right"><button class="btn" id="eventSyncNow" type="button">Ambil dari website</button></div></div>
-      <div class="event-tabs" role="tablist" aria-label="Bagian Event">
-        <button type="button" data-event-tab="active" class="on">Event aktif</button>
-        <button type="button" data-event-tab="create">Buat event</button>
-        <button type="button" data-event-tab="history">Riwayat event</button>
+      <div class="head"><div><h1>Event</h1><div class="lead">Meeting, competition, schedule, timing, hasil.</div></div><div class="right"><button class="btn" id="eventSyncNow" type="button">Ambil dari website</button></div></div>
+      <nav class="event-workflow" aria-label="Alur event">
+        <button type="button" data-event-pane-tab="meeting" class="on">01 <b>Meeting</b></button>
+        <button type="button" data-event-pane-tab="drivers">02 <b>Drivers</b></button>
+        <button type="button" data-event-pane-tab="schedule">03 <b>Schedule</b></button>
+        <button type="button" data-event-pane-tab="timing">04 <b>Timing</b></button>
+        <button type="button" data-event-pane-tab="results">05 <b>Results</b></button>
+      </nav>
+      <div class="event-workspace">
+        <aside class="event-rail"><div class="event-rail-head"><strong>Meetings</strong><span id="eventMeetingCount"></span></div><div id="eventActiveList" class="event-list"></div><div class="event-rail-head"><strong>Archive</strong></div><div id="eventHistoryList" class="event-list"></div></aside>
+        <div class="event-main">
+          <div id="eventError" role="alert" hidden></div>
+          <section data-event-pane="meeting">
+            <div class="card event-hero"><div><span class="event-kicker">CURRENT MEETING</span><h2 id="eventTitle">Pilih meeting</h2><div id="eventMeta" class="event-muted"></div><div id="eventSync" class="event-muted"></div></div><div><span id="eventState" class="event-status"></span><div id="eventActions" class="actions"></div></div></div>
+            <details class="card event-editor"><summary>Buat meeting baru</summary><form id="eventCreateForm" class="event-form"><label>Nama meeting<input id="eventName" required maxlength="100"></label><label>Tanggal<input id="eventDate" type="date" required></label><label>Track<select id="eventTrack" required></select></label><label>Format awal<select id="eventFormat"><option value="qualifying_main">Qualifiers + Finals</option><option value="heat_final">Heats + Finals</option></select></label><label class="wide">Competitions / kelas, pisahkan dengan koma<input id="eventClasses" placeholder="Contoh: 1/10 Buggy, 1/8 Buggy" required></label><label>Leg terbaik dihitung<input id="eventBestLegs" type="number" min="1" max="10" value="1" required></label><label class="wide">Poin per posisi<input id="eventPoints" value="25,18,15,12,10,8,6,4,2,1" required></label><div class="foot"><button class="btn primary" type="submit">Buat meeting</button></div></form></details>
+            <div class="card"><h3>Competitions</h3><p class="event-muted">Setiap competition punya peserta dan format ronde sendiri.</p><div id="eventCompetitionSummary"></div></div>
+          </section>
+          <section data-event-pane="drivers" hidden>
+            <div class="card"><h2>Drivers & transponders</h2><p class="event-muted">Pilih satu mobil per pembalap untuk tiap competition. Persetujuan dan check-in tetap terpisah.</p><div id="eventEntries"></div><form id="eventEntryForm" class="event-form"><label>Competition<select id="eventEntryClass" required></select></label><label>Driver<select id="eventEntryMember" required></select></label><label class="wide">Mobil / transponder<select id="eventEntryCar" required></select></label><div class="foot"><button class="btn primary" type="submit">Tambahkan driver</button></div></form></div>
+          </section>
+          <section data-event-pane="schedule" hidden>
+            <div class="card"><div class="event-section-head"><div><h2>Competitions</h2><p class="event-muted">Atur format setiap kelas, lalu buat ronde dari roster yang disetujui.</p></div></div><div id="eventCompetitionList"></div>
+              <form id="eventCompetitionForm" class="event-form event-config-form" hidden>
+                <h3 class="wide" id="eventCompetitionHeading">Competition</h3>
+                <input id="eventCompetitionId" type="hidden">
+                <label class="wide">Nama competition<input id="eventCompetitionName" maxlength="60" required></label>
+                <label>Practice<select id="eventCompetitionPractice"><option value="false">Tidak terjadwal</option><option value="true">Aktif</option></select></label>
+                <label>Pembagian awal<select id="eventCompetitionStack"><option value="even">Even: sebar merata</option><option value="front">Front: unggulan di grup depan</option></select></label>
+                <label>Minimum driver per grup<input id="eventCompetitionMin" type="number" min="1" max="30" value="4" required></label><label>Maksimum driver per grup<input id="eventCompetitionMax" type="number" min="2" max="30" value="12" required></label>
+                <h3 class="wide">Qualifiers</h3><label>Ronde<input id="eventQualRounds" type="number" min="0" max="10" value="3" required></label><label>Durasi per heat (detik)<input id="eventQualTime" type="number" min="1" max="36000" value="300" required></label><label>Start<select id="eventQualStart"><option value="staggered">Staggered</option><option value="grid">Grid</option></select></label><label>Ranking<select id="eventQualRank"><option value="result">Lap + waktu</option><option value="best">Best lap</option><option value="top3">Top 3 average</option><option value="consecutive">Top 3 consecutive</option><option value="position">Posisi lintasan</option></select></label>
+                <h3 class="wide">Finals</h3><label>Ronde<input id="eventFinalRounds" type="number" min="0" max="10" value="3" required></label><label>Durasi per main (detik)<input id="eventFinalTime" type="number" min="1" max="36000" value="300" required></label><label>Start<select id="eventFinalStart"><option value="grid">Grid</option><option value="staggered">Staggered</option></select></label><label>Ranking<select id="eventFinalRank"><option value="position">Posisi lintasan</option><option value="result">Lap + waktu</option><option value="best">Best lap</option><option value="top3">Top 3 average</option><option value="consecutive">Top 3 consecutive</option></select></label>
+                <div class="foot"><button class="btn" type="button" id="eventCompetitionCancel">Batal</button><button class="btn primary" type="submit">Simpan format</button></div>
+              </form>
+            </div>
+            <div class="card"><div class="event-section-head"><div><h2>Run order</h2><p class="event-muted">Sesi terjadwal bisa dinaikkan atau diturunkan. Sesi yang sudah berjalan terkunci.</p></div></div><div id="eventStages"></div></div>
+            <details class="card event-editor"><summary>Tambah sesi khusus</summary><form id="eventStageForm" class="event-form">
+              <label>Competition<select id="eventStageClass" required></select></label><label>Jenis sesi<select id="eventStageKind"><option value="qualifying">Qualifier</option><option value="heat">Heat</option><option value="main">Main</option><option value="final">Final</option><option value="practice">Practice terjadwal</option></select></label>
+              <label>Nama sesi<input id="eventStageName" required></label><label>Grup<input id="eventStageGroup" value="Semua" required></label>
+              <label class="wide">Preset<select id="eventStagePreset"><option value="">Atur langsung</option></select></label>
+              <label>Target<select id="eventStageTarget"><option value="time">Waktu</option><option value="laps">Lap</option></select></label><label>Target (detik atau lap)<input id="eventStageValue" type="number" min="1" value="300" required></label>
+              <label>Start<select id="eventStageStart"><option value="grid">Grid</option><option value="staggered">Staggered</option></select></label><label>Ranking<select id="eventStageRank"><option value="position">Posisi lintasan</option><option value="result">Lap + waktu</option><option value="best">Best lap</option><option value="top3">Top 3 average</option><option value="consecutive">Top 3 consecutive</option></select></label>
+              <label>Countdown (detik)<input id="eventStageCountdown" type="number" min="0" max="60" value="5"></label><label>Random delay (detik)<input id="eventStageDelay" type="number" min="2" max="4" value="2"></label><label>Ketukan countdown (ms)<input id="eventStageStep" type="number" min="1000" max="3000" value="1500"></label><label>Jeda staggered (detik)<input id="eventStageGap" type="number" min="1" value="10"></label><label>Mode staggered<select id="eventStageStagger"><option value="manual">By passing</option><option value="auto">Panggilan otomatis</option></select></label><label class="wide"><input id="eventStageFinishLap" type="checkbox" style="display:inline;width:auto;margin-right:6px">Selesaikan lap yang sedang berjalan saat waktu habis</label>
+              <div class="wide"><span class="event-muted">Kosongkan untuk seluruh driver yang check-in.</span><div id="eventStageEntries"></div></div><div class="foot"><button class="btn" type="submit">Tambahkan sesi</button></div>
+            </form></details>
+          </section>
+          <section data-event-pane="timing" hidden><div class="card"><h2>Timing</h2><div id="eventTiming"></div><div id="eventLive"></div></div></section>
+          <section data-event-pane="results" hidden><div class="card"><h2>Results</h2><div id="eventResults"></div></div></section>
+        </div>
       </div>
-      <section id="event-active">
-        <div class="event-tabs" aria-label="Alur Event"><button type="button" data-event-pane-tab="overview" class="on">Peserta</button><button type="button" data-event-pane-tab="schedule">Schedule</button><button type="button" data-event-pane-tab="timing">Timing</button><button type="button" data-event-pane-tab="results">Hasil</button></div>
-        <div class="event-layout"><div>
-          <div class="card" data-event-pane="overview"><div class="event-row"><h2 id="eventTitle" style="font-size:18px">Pilih event</h2><span id="eventState" class="event-status"></span></div><div id="eventMeta" class="event-muted"></div><div id="eventSync" class="event-muted"></div><div class="event-row"><div id="eventActions" class="actions"></div></div></div>
-          <div class="card" data-event-pane="overview"><h3>Pendaftaran dan check-in</h3><div id="eventEntries"></div>
-            <form id="eventEntryForm" class="event-form"><label>Kelas<select id="eventEntryClass" required></select></label><label>Pembalap<select id="eventEntryMember" required></select></label><label>Mobil / transponder<select id="eventEntryCar" required></select></label><div class="foot"><button class="btn primary" type="submit">Tambah peserta</button></div></form>
-          </div>
-          <div class="card" data-event-pane="schedule"><h3>Jadwal sesi</h3><p class="event-muted">Susun urutan sesi. Sesi yang sudah berjalan atau tersimpan terkunci.</p><div id="eventStages"></div>
-            <form id="eventStageForm" class="event-form">
-              <label>Kelas<select id="eventStageClass" required></select></label>
-              <label>Jenis sesi<select id="eventStageKind"><option value="qualifying">Kualifikasi</option><option value="heat">Heat</option><option value="main">Main</option><option value="final">Final</option><option value="practice">Practice terjadwal</option></select></label>
-              <label>Nama sesi<input id="eventStageName" placeholder="Contoh: Kualifikasi R1" required></label>
-              <label>Grup<input id="eventStageGroup" value="Semua" required></label>
-              <label class="wide">Salin pengaturan dari preset (opsional)<select id="eventStagePreset"><option value="">Atur langsung di bawah</option></select></label>
-              <label>Target<select id="eventStageTarget"><option value="time">Waktu</option><option value="laps">Lap</option></select></label>
-              <label>Nilai target (detik atau lap)<input id="eventStageValue" type="number" min="1" value="180" required></label>
-              <label>Start<select id="eventStageStart"><option value="grid">Grid</option><option value="staggered">Staggered</option></select></label>
-              <label>Penilaian<select id="eventStageRank"><option value="position">Posisi lintasan</option><option value="result">Lap dan total waktu</option><option value="best">Best lap</option><option value="top3">Rata-rata 3 lap</option><option value="consecutive">3 lap berurutan</option></select></label>
-              <label>Countdown (detik)<input id="eventStageCountdown" type="number" min="0" max="60" value="5"></label>
-              <label>Random delay maksimal (2–4 detik)<input id="eventStageDelay" type="number" min="2" max="4" value="2"></label>
-              <label>Jeda angka countdown (ms)<input id="eventStageStep" type="number" min="1000" max="3000" value="1500"></label>
-              <label>Jeda panggilan staggered (detik)<input id="eventStageGap" type="number" min="1" value="10"></label>
-              <label>Mode staggered<select id="eventStageStagger"><option value="manual">Manual / by passing</option><option value="auto">Panggilan otomatis</option></select></label>
-              <label class="wide"><input id="eventStageFinishLap" type="checkbox" style="display:inline;width:auto;margin-right:6px">Jika target waktu habis, selesaikan lap yang sedang berjalan</label>
-              <div class="wide"><span class="event-muted">Kosongkan pilihan untuk semua peserta kelas; pilih peserta bila sesi dibagi per grup.</span><div id="eventStageEntries"></div></div>
-              <div class="foot"><button class="btn" type="submit">Tambahkan sesi</button></div>
-            </form>
-          </div>
-          <div class="card" data-event-pane="timing"><h3>Timing</h3><div id="eventTiming"></div><div id="eventLive"></div></div>
-          <div class="card" data-event-pane="results"><h3>Hasil event</h3><div id="eventResults"></div></div>
-        </div><div><div class="side-card"><h3>Pilih event</h3><div id="eventActiveList" class="event-list"></div></div></div></div>
-      </section>
-      <section id="event-create" hidden><div class="card"><h2 style="font-size:17px;margin-bottom:12px">Buat event baru</h2>
-        <form id="eventCreateForm" class="event-form"><label>Nama event<input id="eventName" required maxlength="100"></label><label>Tanggal<input id="eventDate" type="date" required></label><label>Track<select id="eventTrack" required></select></label><label>Format<select id="eventFormat"><option value="qualifying_main">Kualifikasi → Main</option><option value="heat_final">Heat → Final</option></select></label><label class="wide">Kelas (pisahkan dengan koma)<input id="eventClasses" placeholder="Contoh: 1/10 Buggy, 1/8 Buggy" required></label><label>Leg terbaik dihitung<input id="eventBestLegs" type="number" min="1" max="10" value="1" required></label><label class="wide">Poin per posisi (pisahkan dengan koma)<input id="eventPoints" value="25,18,15,12,10,8,6,4,2,1" required></label><div class="foot"><button class="btn primary" type="submit">Simpan event</button></div></form>
-      </div></section>
-      <section id="event-history" hidden><div class="event-layout"><div><div id="eventHistoryDetail" class="card"></div></div><div id="eventHistoryList" class="event-list"></div></div></section>
     </div>
 
     <!-- ==================== HISTORY RACE ==================== -->

@@ -138,6 +138,62 @@ class EventStore:
             }
             return self._save(event)
 
+    def configure_competition(self, event_id, class_id, data):
+        """Store the schedule recipe for one competition without touching results."""
+        with self.club.lock:
+            event = self.get(event_id)
+            if event["status"] == "completed":
+                raise ValueError("Meeting sudah selesai")
+            competition = next((item for item in event["classes"] if item["id"] == class_id), None)
+            if competition is None:
+                raise ValueError("Competition tidak ditemukan")
+            if any(stage["class_id"] == class_id for stage in event["stages"]):
+                raise ValueError("Hapus sesi terjadwal competition ini sebelum mengubah format")
+            name = _label(data.get("name") or competition["name"], "Nama competition", 60)
+            if any(item["id"] != class_id and item["name"].casefold() == name.casefold()
+                   for item in event["classes"]):
+                raise ValueError("Nama competition sudah dipakai")
+            def count(key, default, low, high):
+                try:
+                    value = int(data.get(key, default))
+                except (TypeError, ValueError):
+                    raise ValueError(f"{key} harus berupa angka bulat")
+                if not low <= value <= high:
+                    raise ValueError(f"{key} harus {low}–{high}")
+                return value
+            minimum = count("group_min", 4, 1, 30)
+            maximum = count("group_max", 12, 2, 30)
+            if minimum > maximum:
+                raise ValueError("Minimum grup tidak boleh lebih besar dari maksimum")
+            qualifier_rounds = count("qualifier_rounds", 3, 0, 10)
+            final_rounds = count("final_rounds", 3, 0, 10)
+            if not qualifier_rounds and not final_rounds:
+                raise ValueError("Competition perlu minimal satu ronde")
+            seed = data.get("initial_stacking", "even")
+            if seed not in ("even", "front"):
+                raise ValueError("Pembagian grup tidak dikenal")
+            config = {
+                "practice": bool(data.get("practice", False)),
+                "qualifier_rounds": qualifier_rounds,
+                "final_rounds": final_rounds,
+                "group_min": minimum, "group_max": maximum,
+                "initial_stacking": seed,
+                "qualifier_start": data.get("qualifier_start", "staggered"),
+                "final_start": data.get("final_start", "grid"),
+                "qualifier_rank": data.get("qualifier_rank", "result"),
+                "final_rank": data.get("final_rank", "position"),
+                "qualifier_target": count("qualifier_target", 300, 1, 36000),
+                "final_target": count("final_target", 300, 1, 36000),
+            }
+            if config["qualifier_start"] not in ("grid", "staggered") or config["final_start"] not in ("grid", "staggered"):
+                raise ValueError("Mode start tidak dikenal")
+            ranks = ("position", "result", "best", "top3", "consecutive")
+            if config["qualifier_rank"] not in ranks or config["final_rank"] not in ranks:
+                raise ValueError("Penilaian tidak dikenal")
+            competition["name"] = name
+            competition["config"] = config
+            return self._save(event)
+
     def set_status(self, event_id, status):
         with self.club.lock:
             event = self.get(event_id)
@@ -300,6 +356,78 @@ class EventStore:
             for number, item in enumerate(stages, 1):
                 item["sequence"] = number
             return self._save(event)
+
+    def generate_round(self, event_id, data):
+        """Build one round of grouped sessions from the approved roster."""
+        with self.club.lock:
+            event = self.get(event_id)
+            if event["status"] == "completed":
+                raise ValueError("Event sudah selesai")
+            class_id = str(data.get("class_id") or "")
+            if not any(item["id"] == class_id for item in event["classes"]):
+                raise ValueError("Pilih kelas Event")
+            kind = str(data.get("kind") or "")
+            if kind not in KINDS or kind == "practice":
+                raise ValueError("Pilih jenis ronde perlombaan")
+            group_max = int(data.get("group_max") or 0)
+            if group_max < 2 or group_max > 30:
+                raise ValueError("Kapasitas grup harus 2–30 mobil")
+            entries = [entry for entry in event["entries"]
+                       if entry["class_id"] == class_id and entry["approved"]]
+            if not entries:
+                raise ValueError("Setujui peserta kelas ini sebelum membuat ronde")
+            basis = data.get("seed_basis") or "registration"
+            if basis not in ("registration", "best"):
+                raise ValueError("Metode seeding tidak valid")
+            if basis == "best":
+                best = {}
+                for stage in event["stages"]:
+                    if stage["class_id"] != class_id or stage["status"] != "saved" or not stage.get("race_id"):
+                        continue
+                    race = self.club.race(stage["race_id"])
+                    for driver in (race or {}).get("drivers", []):
+                        lap = driver.get("best_ms")
+                        tp = str(driver.get("transponder") or "")
+                        if isinstance(lap, (int, float)) and lap > 0:
+                            best[tp] = min(best.get(tp, lap), lap)
+                if not best:
+                    raise ValueError("Belum ada hasil tersimpan untuk seeding best lap")
+                entries.sort(key=lambda entry: (best.get(str(entry["transponder"]), float("inf")),
+                                                event["entries"].index(entry)))
+            mode = data.get("group_mode") or "balanced"
+            if mode not in ("balanced", "top"):
+                raise ValueError("Pembagian grup tidak valid")
+            group_count = (len(entries) + group_max - 1) // group_max
+            groups = [[] for _ in range(group_count)]
+            for index, entry in enumerate(entries):
+                if mode == "top":
+                    group_index = index // group_max
+                else:
+                    span = group_count * 2
+                    slot = index % span
+                    group_index = slot if slot < group_count else span - slot - 1
+                groups[group_index].append(entry["id"])
+            cfg = normalize(data.get("cfg") or {})
+            name = _label(data.get("name"), "Nama ronde")
+            try:
+                rounds = int(data.get("rounds") or 1)
+            except (TypeError, ValueError):
+                raise ValueError("Jumlah ronde harus berupa angka")
+            if not 1 <= rounds <= 10:
+                raise ValueError("Jumlah ronde harus 1–10")
+            created = []
+            for round_number in range(1, rounds + 1):
+                round_name = f"{name} R{round_number}" if rounds > 1 else name
+                for index, ids in enumerate(groups):
+                    label = chr(65 + index) if index < 26 else str(index + 1)
+                    stage = {"id": _id(), "class_id": class_id, "kind": kind,
+                             "name": f"{round_name} · Grup {label}", "group": label,
+                             "cfg": dict(cfg), "status": "planned", "race_id": None,
+                             "entry_ids": ids, "sequence": len(event["stages"]) + 1}
+                    event["stages"].append(stage)
+                    created.append(stage)
+            self._save(event)
+            return created
 
     def mark_stage(self, event_id, stage_id, status, race_id=None):
         with self.club.lock:
