@@ -81,6 +81,7 @@ function competitionConfig(c){return Object.assign({practice:false,qualifier_rou
   qualifier_rank:'result',final_rank:'position',qualifier_target:300,final_target:300},c.config||{});}
 function renderCompetitions(){
   const classes=selected?.classes||[];
+  $('eventCompetitionAddForm').hidden=!selected||!['draft','registration'].includes(selected.status);
   $('eventCompetitionSummary').innerHTML=classes.length?classes.map(c=>{
     const count=selected.entries.filter(e=>e.class_id===c.id).length;
     const cfg=competitionConfig(c);
@@ -96,7 +97,8 @@ function renderCompetitions(){
       <div class="actions"><button class="btn sm" data-competition-edit="${esc(c.id)}" ${stages.length?'disabled':''}>Atur format</button>
       ${cfg.practice?`<button class="btn sm" data-competition-practice="${esc(c.id)}" ${p||!approved||selected.status==='completed'?'disabled':''}>Buat practice</button>`:''}
       <button class="btn sm" data-competition-generate="qualifying" data-class-id="${esc(c.id)}" ${q||!approved||!cfg.qualifier_rounds||selected.status==='completed'?'disabled':''}>Buat qualifiers</button>
-      <button class="btn sm" data-competition-generate="final" data-class-id="${esc(c.id)}" ${f||!approved||!cfg.final_rounds||qPending||selected.status==='completed'?'disabled':''}>Buat finals</button></div></article>`;
+      <button class="btn sm" data-competition-generate="final" data-class-id="${esc(c.id)}" ${f||!approved||!cfg.final_rounds||qPending||selected.status==='completed'?'disabled':''}>Buat finals</button>
+      ${classes.length>1&&!stages.length&&!selected.entries.some(e=>e.class_id===c.id)&&['draft','registration'].includes(selected.status)?`<button class="btn sm danger" data-competition-remove="${esc(c.id)}">Hapus</button>`:''}</div></article>`;
   }).join('')||'<p class="note">Belum ada competition.</p>';
 }
 function renderStages(){
@@ -202,6 +204,9 @@ document.addEventListener('click',async event=>{
         start_mode:'staggered',rank:'best',cd:5,random_delay_max:2,
         countdown_step_ms:1500,finish_current_lap:true}});return;
   }
+  const removeCompetition=event.target.closest('[data-competition-remove]');
+  if(removeCompetition&&selected){await mutate('/api/event/competition/remove',
+    {event_id:selected.id,class_id:removeCompetition.dataset.competitionRemove});return;}
   const status=event.target.closest('[data-event-status]');
   if(status&&selected){await mutate('/api/event/status',{event_id:selected.id,status:status.dataset.eventStatus});return;}
   const resolve=event.target.closest('[data-event-resolve]');
@@ -226,6 +231,11 @@ document.addEventListener('click',async event=>{
   }
 });
 $('eventEntryMember').onchange=renderCars;
+$('eventCompetitionAddForm').onsubmit=async event=>{
+  event.preventDefault();if(!selected)return;
+  try{await api('/api/event/competition/add',{event_id:selected.id,
+    name:$('eventCompetitionNewName').value});$('eventCompetitionNewName').value='';await load(selected.id);}catch(error){fail(error);}
+};
 $('eventCompetitionCancel').onclick=()=>{$('eventCompetitionForm').hidden=true;};
 $('eventCompetitionForm').onsubmit=async event=>{
   event.preventDefault();if(!selected)return;

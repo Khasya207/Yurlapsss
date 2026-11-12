@@ -741,6 +741,12 @@ def make_handler(ctx: AppContext):
                     if path == "/api/event/competition/config":
                         return self._json({"ok": True, "event": store.configure_competition(
                             event_id, str(data.get("class_id") or ""), data)})
+                    if path == "/api/event/competition/add":
+                        return self._json({"ok": True, "event": store.add_competition(
+                            event_id, data.get("name"))})
+                    if path == "/api/event/competition/remove":
+                        return self._json({"ok": True, "event": store.remove_competition(
+                            event_id, str(data.get("class_id") or ""))})
                     if path == "/api/event/resolve":
                         event = store.resolve_sync_conflict(event_id, data.get("choice"))
                         ctx.cloud.wake.set()

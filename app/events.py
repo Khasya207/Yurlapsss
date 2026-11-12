@@ -194,6 +194,32 @@ class EventStore:
             competition["config"] = config
             return self._save(event)
 
+    def add_competition(self, event_id, name):
+        with self.club.lock:
+            event = self.get(event_id)
+            if event["status"] not in ("draft", "registration"):
+                raise ValueError("Competition hanya dapat ditambah sebelum meeting berjalan")
+            name = _label(name, "Nama competition", 60)
+            if any(item["name"].casefold() == name.casefold() for item in event["classes"]):
+                raise ValueError("Nama competition sudah dipakai")
+            event["classes"].append({"id": _id(), "name": name})
+            return self._save(event)
+
+    def remove_competition(self, event_id, class_id):
+        with self.club.lock:
+            event = self.get(event_id)
+            if event["status"] not in ("draft", "registration"):
+                raise ValueError("Competition tidak dapat dihapus setelah meeting berjalan")
+            if len(event["classes"]) <= 1:
+                raise ValueError("Meeting perlu minimal satu competition")
+            if any(item["class_id"] == class_id for item in event["entries"] + event["stages"]):
+                raise ValueError("Hapus peserta dan sesi competition ini terlebih dahulu")
+            before = len(event["classes"])
+            event["classes"] = [item for item in event["classes"] if item["id"] != class_id]
+            if len(event["classes"]) == before:
+                raise ValueError("Competition tidak ditemukan")
+            return self._save(event)
+
     def set_status(self, event_id, status):
         with self.club.lock:
             event = self.get(event_id)

@@ -84,6 +84,16 @@ class EventTests(unittest.TestCase):
                 {"group_min": 12, "group_max": 4})
         self.assertNotIn("config", self.store.get(event_id)["classes"][0])
 
+    def test_competition_can_be_added_and_removed_before_entries(self):
+        event_id = self.event["id"]
+        updated = self.store.add_competition(event_id, "Truggy")
+        new_id = updated["classes"][-1]["id"]
+        self.assertEqual(updated["classes"][-1]["name"], "Truggy")
+        with self.assertRaisesRegex(ValueError, "sudah dipakai"):
+            self.store.add_competition(event_id, "truggy")
+        self.store.remove_competition(event_id, new_id)
+        self.assertEqual(len(self.store.get(event_id)["classes"]), 2)
+
     def test_approval_checkin_and_stage_entry_validation(self):
         alice = self.store.add_entry(self.event["id"], {"class_id": self.class_id,
             "member_id": self.alice["id"], "transponder": 101})
