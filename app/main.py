@@ -155,6 +155,8 @@ class YurLaps:
         threading.Thread(target=self._device_loop, name="device-poll",
                          daemon=True).start()
     _device_seen = None
+    _last_device_seen_at = 0.0
+    _last_device_list = None
 
     def _device_loop(self, every: float = 5.0) -> None:
         """Pantau YurLaps Decoder berkala → tersambung/terputus langsung terdeteksi."""
@@ -202,6 +204,15 @@ class YurLaps:
             prev = self._device_seen
             selected = self.cfg.decoder_device_serial
             now_seen = any(d["serial"] == selected and d["selectable"] for d in devices) if selected else False
+            if now_seen:
+                self._last_device_seen_at = time.monotonic()
+                self._last_device_list = devices
+            elif self._device_seen and (time.monotonic() - self._last_device_seen_at < 15
+                                        or bool(self.supervisor and self.supervisor.status.running)):
+                # One failed USB scan must not make the selected decoder
+                # disappear or terminate its running process.
+                now_seen = True
+                self.engine.device_info["devices"] = self._last_device_list or devices
             self._device_seen = now_seen
             supervisor = self.supervisor
             if supervisor is not None:

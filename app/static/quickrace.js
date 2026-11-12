@@ -861,6 +861,7 @@ $('guestForm').onsubmit=async e=>{
 
 let decOnline = false;
 let decoderBusy = false;
+let decoderListMarkup = null;
 async function segarkanDecoder(){
   if(decoderBusy) return;
   decoderBusy = true;
@@ -871,17 +872,18 @@ async function segarkanDecoder(){
     $('decDev').textContent = 'YurLaps Decoder';
     $('decSelectedSerial').textContent = d.selected_serial || 'Belum dipilih';
     const devices = d.devices || [];
-    $('decSerialList').innerHTML = devices.length ? devices.map(device => {
+    const listMarkup = devices.length ? devices.map(device => {
       const serial = device.serial || '';
       const description = device.problem || (device.active ? 'Aktif otomatis saat tersambung' : 'Terdeteksi, belum aktif');
       return `<div style="display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid #e8edf2;flex-wrap:wrap">
         <div style="flex:1;min-width:180px"><b class="mono">${esc(serial || 'ID belum terbaca')}</b><small style="display:block;color:#64748b">YurLaps Decoder · ${esc(description)}</small></div>
         <span class="note">Gain ${Number(device.gain ?? 20).toFixed(1)} dB</span>
-        <button type="button" class="btn sm ${device.active ? '' : 'primary'}" data-dec-serial="${esc(serial)}" data-dec-enabled="${device.active ? 'false' : 'true'}" ${!device.selectable || sedangJalan() ? 'disabled' : ''}>${device.active ? 'Nonaktifkan' : 'Aktifkan decoder'}</button>
+        <button type="button" class="btn sm ${device.active ? '' : 'primary'}" data-dec-serial="${esc(serial)}" data-dec-enabled="${device.active ? 'false' : 'true'}" ${(!device.selectable && !device.active) || sedangJalan() ? 'disabled' : ''}>${device.active ? 'Nonaktifkan' : 'Aktifkan decoder'}</button>
       </div>`;
     }).join('') : '<div class="note">Belum ada YurLaps Decoder terdeteksi.</div>';
-    $('topDecoder').className='pill '+(decOnline?'online':'offline');
-    $('topDecoderText').textContent=decOnline?'Decoder terhubung':'Decoder tidak terhubung';
+    if(listMarkup !== decoderListMarkup){$('decSerialList').innerHTML = listMarkup;decoderListMarkup = listMarkup;}
+    $('topDecoder').className='pill '+(decOnline||manager.running?'online':'offline');
+    $('topDecoderText').textContent=decOnline?'Decoder menerima data':manager.running?'Decoder aktif':'Decoder tidak terhubung';
     $('decLed').textContent = decOnline ? '● Data diterima' : manager.running ? '● Proses aktif · belum ada data' : '○ Tidak terhubung';
     $('decLed').style.color = decOnline ? '#168657' : '#9b6a19';
     $('decRate').textContent = (d.counters || {}).P || 0;
@@ -889,7 +891,7 @@ async function segarkanDecoder(){
     $('decDiagnostic').textContent = decOnline
       ? `Menerima passing · ${d.counters.P || 0} terbaca`
       : manager.running ? 'Menunggu passing dari YurLaps Decoder.'
-      : 'YurLaps Decoder belum berjalan. Periksa perangkat dan driver USB.';
+      : manager.last_error || manager.message || 'YurLaps Decoder belum berjalan. Periksa perangkat dan driver USB.';
     const g = Number(d.gain ?? 20);
     $('decGain').textContent = g.toFixed(1) + ' dB';
     gainTersimpan = g;

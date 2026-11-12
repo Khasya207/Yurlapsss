@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const token=new URLSearchParams(location.search).get('t');
-let events=[], selected=null, results=[], standings=[], members=[], tracks=[], presets=[], race=null, sync=null, tab='active';
+let events=[], selected=null, results=[], standings=[], members=[], tracks=[], presets=[], race=null, sync=null, tab='active', pane='overview';
 let timer=null;
 
 async function api(path,body){
@@ -43,6 +43,11 @@ function renderTabs(){
     button.setAttribute('aria-selected',button.dataset.eventTab===tab?'true':'false');
   });
   for(const key of ['active','create','history'])$('event-'+key).hidden=key!==tab;
+  document.querySelectorAll('[data-event-pane-tab]').forEach(button=>{
+    button.classList.toggle('on',button.dataset.eventPaneTab===pane);
+    button.setAttribute('aria-pressed',button.dataset.eventPaneTab===pane?'true':'false');
+  });
+  document.querySelectorAll('[data-event-pane]').forEach(section=>{section.hidden=section.dataset.eventPane!==pane;});
 }
 function renderList(){
   const active=events.filter(e=>e.status!=='completed');
@@ -83,7 +88,7 @@ function renderStages(){
   $('eventStagePreset').innerHTML='<option value="">Atur langsung di bawah</option>'+presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${p.target==='laps'?esc(p.value)+' lap':esc(p.value)+' detik'}</option>`).join('');
   renderStageEntries();
   const stages=selected?.stages||[];
-  $('eventStages').innerHTML=stages.length?stages.map(s=>`<div class="event-row"><div><b>${esc(s.sequence)}. ${esc(s.name)}</b><div class="event-muted">${esc(className(s.class_id))} · ${esc(s.group)} · ${esc(s.kind)} · ${s.entry_ids.length?s.entry_ids.length+' peserta':'semua peserta kelas'}</div><small class="event-status">${s.status==='saved'?'Hasil tersimpan':s.status==='live'?(race?.status==='idle'?'Timing terputus':'Sedang berjalan'):'Terjadwal'}</small></div><div class="actions">${selected.status==='running'&&s.status==='planned'?`<button class="btn sm primary" data-stage-action="start" data-id="${esc(s.id)}">Jalankan</button>`:''}${s.status==='planned'?`<button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus</button>`:''}${s.status==='live'&&race?.status!=='idle'?`<button class="btn sm fin" data-stage-action="save" data-id="${esc(s.id)}">Selesai & simpan</button>`:''}${s.status==='live'&&race?.status==='idle'?`<button class="btn sm" data-stage-action="retry" data-id="${esc(s.id)}">Jalankan ulang</button>`:''}${s.status==='saved'&&race?.status==='done'&&race?.saved_id===s.race_id?`<button class="btn sm" data-stage-action="reset" data-id="${esc(s.id)}">Siap sesi berikutnya</button>`:''}</div></div>`).join(''):'<p class="note">Belum ada sesi. Tambahkan kualifikasi, heat, main, atau final sesuai format event.</p>';
+  $('eventStages').innerHTML=stages.length?stages.map(s=>`<div class="event-row"><div><b>${esc(s.sequence)}. ${esc(s.name)}</b><div class="event-muted">${esc(className(s.class_id))} · ${esc(s.group)} · ${esc(s.kind)} · ${s.entry_ids.length?s.entry_ids.length+' peserta':'semua peserta kelas'}</div><small class="event-status">${s.status==='saved'?'Hasil tersimpan':s.status==='live'?(race?.status==='idle'?'Timing terputus':'Sedang berjalan'):'Terjadwal'}</small></div><div class="actions">${s.status==='planned'?`<button class="btn sm" data-stage-action="move" data-direction="up" data-id="${esc(s.id)}" aria-label="Naikkan ${esc(s.name)}">↑</button><button class="btn sm" data-stage-action="move" data-direction="down" data-id="${esc(s.id)}" aria-label="Turunkan ${esc(s.name)}">↓</button><button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus</button>`:''}</div></div>`).join(''):'<p class="note">Belum ada sesi. Tambahkan kualifikasi, heat, main, atau final sesuai format event.</p>';
   $('eventStageForm').hidden=!selected||selected.status==='completed';
 }
 function renderStageEntries(){
@@ -105,6 +110,26 @@ function renderLive(){
   const rows=race?.klasemen||[];
   $('eventLive').innerHTML=`<p><b>${esc(live.name)}</b><br><span class="event-status">${esc(race?.status||'memuat')}</span></p><div class="event-board"><table><thead><tr><th>Pos</th><th>Driver</th><th class="r">Lap</th><th class="r">Best</th></tr></thead><tbody>${rows.map((d,i)=>`<tr><td>${esc(d.pos??i+1)}</td><td>${esc(d.nick||d.name)}</td><td class="r">${esc(d.n_lap??d.laps?.length??0)}</td><td class="r">${fmt(d.best_ms)}</td></tr>`).join('')}</tbody></table></div><p class="event-muted">Timing menggunakan decoder dan mesin race YurLaps.</p>`;
 }
+function renderTiming(){
+  const stages=selected?.stages||[];
+  const live=stages.find(stage=>stage.status==='live');
+  const saved=stages.find(stage=>stage.status==='saved'&&race?.status==='done'&&race?.saved_id===stage.race_id);
+  const next=stages.find(stage=>stage.status==='planned');
+  const stage=live||saved||next;
+  if(!selected){$('eventTiming').innerHTML='<p class="note">Pilih Event untuk menjalankan sesi.</p>';return;}
+  if(!stage){$('eventTiming').innerHTML='<p class="note">Belum ada sesi siap. Susun sesi di Schedule.</p>';return;}
+  const entryIds=new Set(stage.entry_ids||[]);
+  const entrants=selected.entries.filter(entry=>entry.class_id===stage.class_id&&(!entryIds.size||entryIds.has(entry.id)));
+  const ready=entrants.filter(entry=>entry.approved&&entry.checked_in);
+  const action=stage.status==='planned'&&selected.status==='running'&&race?.status==='idle'
+    ? `<button class="btn primary" data-stage-action="start" data-id="${esc(stage.id)}" ${!ready.length?'disabled':''}>Mulai sesi</button>`
+    : stage.status==='live'&&race?.status!=='idle'
+      ? `<button class="btn fin" data-stage-action="save" data-id="${esc(stage.id)}">Selesai & simpan</button>`
+      : stage.status==='live'&&race?.status==='idle'
+        ? `<button class="btn" data-stage-action="retry" data-id="${esc(stage.id)}">Jalankan ulang</button>`
+        : saved ? `<button class="btn" data-stage-action="reset" data-id="${esc(stage.id)}">Siap sesi berikutnya</button>` : '';
+  $('eventTiming').innerHTML=`<div class="event-row"><div><b>${esc(stage.name)}</b><div class="event-muted">${esc(className(stage.class_id))} · ${esc(stage.group)} · ${esc(stage.kind)} · ${ready.length}/${entrants.length} check-in</div></div><div class="actions">${action}</div></div>${stage.status==='planned'&&!ready.length?'<p class="note">Setujui dan check-in peserta di tab Peserta sebelum memulai.</p>':''}`;
+}
 function render(){
   renderTabs();renderList();renderCreate();
   $('eventTitle').textContent=selected?.name||'Pilih event';
@@ -113,11 +138,12 @@ function render(){
   $('eventSync').innerHTML=!selected?'':sync?.conflict?'<p style="color:var(--bad)">Event berubah di aplikasi dan website. Pilih versi yang dipertahankan.</p><div class="actions"><button class="btn sm" data-event-resolve="remote">Pakai versi website</button><button class="btn sm danger" data-event-resolve="local">Kirim versi aplikasi</button></div>':sync?.pending?'Perubahan menunggu sinkronisasi':'Tersinkron';
   const actions=$('eventActions');
   actions.innerHTML=!selected?'':selected.status==='draft'?'<button class="btn primary" data-event-status="registration">Buka pendaftaran</button>':selected.status==='registration'?'<button class="btn primary" data-event-status="running">Mulai event</button>':selected.status==='running'?'<button class="btn" data-event-status="completed">Tutup event</button>':'';
-  renderEntries();renderStages();renderResults();renderLive();
+  renderEntries();renderStages();renderResults();renderTiming();renderLive();
 }
 async function mutate(path,body){try{await api(path,body);await load(selected?.id);}catch(error){fail(error);}}
 
 document.querySelectorAll('[data-event-tab]').forEach(button=>button.onclick=()=>{tab=button.dataset.eventTab;renderTabs();});
+document.querySelectorAll('[data-event-pane-tab]').forEach(button=>button.onclick=()=>{pane=button.dataset.eventPaneTab;renderTabs();});
 document.addEventListener('click',async event=>{
   const select=event.target.closest('[data-event-select]');
   if(select){try{await load(select.dataset.eventSelect);tab=select.closest('#eventHistoryList')?'history':'active';renderTabs();}catch(error){fail(error);}return;}
@@ -140,7 +166,8 @@ document.addEventListener('click',async event=>{
   const stage=event.target.closest('[data-stage-action]');
   if(stage&&selected){
     if(stage.dataset.stageAction==='save'&&!window.confirm('Akhiri sesi timing dan simpan hasilnya?'))return;
-    await mutate('/api/event/stage/'+stage.dataset.stageAction,{event_id:selected.id,stage_id:stage.dataset.id});
+    await mutate('/api/event/stage/'+stage.dataset.stageAction,{event_id:selected.id,stage_id:stage.dataset.id,
+      direction:stage.dataset.direction});
   }
 });
 $('eventEntryMember').onchange=renderCars;
@@ -210,6 +237,6 @@ $('eventStageForm').onsubmit=async event=>{
 window.YurLapsEventPage={open:()=>load().catch(fail)};
 timer=setInterval(async()=>{
   if($('view-event').style.display==='none'||!selected?.stages.some(s=>s.status==='live'))return;
-  try{const detail=await api('/api/event/detail?id='+encodeURIComponent(selected.id));race=detail.race;renderLive();}catch(_error){}
+  try{const detail=await api('/api/event/detail?id='+encodeURIComponent(selected.id));race=detail.race;renderTiming();renderLive();}catch(_error){}
 },1000);
 })();

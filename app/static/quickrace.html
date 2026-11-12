@@ -601,12 +601,13 @@
         <button type="button" data-event-tab="history">Riwayat event</button>
       </div>
       <section id="event-active">
+        <div class="event-tabs" aria-label="Alur Event"><button type="button" data-event-pane-tab="overview" class="on">Peserta</button><button type="button" data-event-pane-tab="schedule">Schedule</button><button type="button" data-event-pane-tab="timing">Timing</button><button type="button" data-event-pane-tab="results">Hasil</button></div>
         <div class="event-layout"><div>
-          <div class="card"><div class="event-row"><h2 id="eventTitle" style="font-size:18px">Pilih event</h2><span id="eventState" class="event-status"></span></div><div id="eventMeta" class="event-muted"></div><div id="eventSync" class="event-muted"></div><div class="event-row"><div id="eventActions" class="actions"></div></div></div>
-          <div class="card"><h3>Pendaftaran dan check-in</h3><div id="eventEntries"></div>
+          <div class="card" data-event-pane="overview"><div class="event-row"><h2 id="eventTitle" style="font-size:18px">Pilih event</h2><span id="eventState" class="event-status"></span></div><div id="eventMeta" class="event-muted"></div><div id="eventSync" class="event-muted"></div><div class="event-row"><div id="eventActions" class="actions"></div></div></div>
+          <div class="card" data-event-pane="overview"><h3>Pendaftaran dan check-in</h3><div id="eventEntries"></div>
             <form id="eventEntryForm" class="event-form"><label>Kelas<select id="eventEntryClass" required></select></label><label>Pembalap<select id="eventEntryMember" required></select></label><label>Mobil / transponder<select id="eventEntryCar" required></select></label><div class="foot"><button class="btn primary" type="submit">Tambah peserta</button></div></form>
           </div>
-          <div class="card"><h3>Jadwal sesi</h3><div id="eventStages"></div>
+          <div class="card" data-event-pane="schedule"><h3>Jadwal sesi</h3><p class="event-muted">Susun urutan sesi. Sesi yang sudah berjalan atau tersimpan terkunci.</p><div id="eventStages"></div>
             <form id="eventStageForm" class="event-form">
               <label>Kelas<select id="eventStageClass" required></select></label>
               <label>Jenis sesi<select id="eventStageKind"><option value="qualifying">Kualifikasi</option><option value="heat">Heat</option><option value="main">Main</option><option value="final">Final</option><option value="practice">Practice terjadwal</option></select></label>
@@ -627,8 +628,9 @@
               <div class="foot"><button class="btn" type="submit">Tambahkan sesi</button></div>
             </form>
           </div>
-          <div class="card"><h3>Hasil event</h3><div id="eventResults"></div></div>
-        </div><div><div class="side-card"><h3>Pilih event</h3><div id="eventActiveList" class="event-list"></div></div><div class="side-card"><h3>Timing sesi</h3><div id="eventLive"></div></div></div></div>
+          <div class="card" data-event-pane="timing"><h3>Timing</h3><div id="eventTiming"></div><div id="eventLive"></div></div>
+          <div class="card" data-event-pane="results"><h3>Hasil event</h3><div id="eventResults"></div></div>
+        </div><div><div class="side-card"><h3>Pilih event</h3><div id="eventActiveList" class="event-list"></div></div></div></div>
       </section>
       <section id="event-create" hidden><div class="card"><h2 style="font-size:17px;margin-bottom:12px">Buat event baru</h2>
         <form id="eventCreateForm" class="event-form"><label>Nama event<input id="eventName" required maxlength="100"></label><label>Tanggal<input id="eventDate" type="date" required></label><label>Track<select id="eventTrack" required></select></label><label>Format<select id="eventFormat"><option value="qualifying_main">Kualifikasi → Main</option><option value="heat_final">Heat → Final</option></select></label><label class="wide">Kelas (pisahkan dengan koma)<input id="eventClasses" placeholder="Contoh: 1/10 Buggy, 1/8 Buggy" required></label><label>Leg terbaik dihitung<input id="eventBestLegs" type="number" min="1" max="10" value="1" required></label><label class="wide">Poin per posisi (pisahkan dengan koma)<input id="eventPoints" value="25,18,15,12,10,8,6,4,2,1" required></label><div class="foot"><button class="btn primary" type="submit">Simpan event</button></div></form>

@@ -40,6 +40,18 @@ class EventTests(unittest.TestCase):
         self.store = EventStore(reopened)
         self.assertEqual(self.store.get(self.event["id"])["entries"][0]["transponder"], "101")
 
+    def test_schedule_move_keeps_sequence_and_protects_saved_sessions(self):
+        first = self.store.add_stage(self.event["id"], {"class_id": self.class_id,
+            "kind": "qualifying", "name": "Q1", "group": "Semua", "cfg": {}})
+        second = self.store.add_stage(self.event["id"], {"class_id": self.class_id,
+            "kind": "qualifying", "name": "Q2", "group": "Semua", "cfg": {}})
+        moved = self.store.move_stage(self.event["id"], second["id"], "up")
+        self.assertEqual([s["name"] for s in moved["stages"]], ["Q2", "Q1"])
+        self.assertEqual([s["sequence"] for s in moved["stages"]], [1, 2])
+        self.store.mark_stage(self.event["id"], second["id"], "live")
+        with self.assertRaisesRegex(ValueError, "melewati"):
+            self.store.move_stage(self.event["id"], first["id"], "up")
+
     def test_approval_checkin_and_stage_entry_validation(self):
         alice = self.store.add_entry(self.event["id"], {"class_id": self.class_id,
             "member_id": self.alice["id"], "transponder": 101})

@@ -436,12 +436,20 @@ def make_handler(ctx: AppContext):
                 snap["decoder"]["gain"] = cfg.decoder_gain
                 snap["decoder"]["name"] = "YurLaps Decoder"
                 snap["decoder"]["selected_serial"] = cfg.decoder_device_serial
+                visible_devices = list(snap["decoder"].get("device", {}).get("devices", []))
+                selected_serial = cfg.decoder_device_serial
+                if selected_serial and not any(d.get("serial") == selected_serial for d in visible_devices):
+                    visible_devices.append({"serial": selected_serial,
+                                            "name": "YurLaps Decoder",
+                                            "selectable": False,
+                                            "present": False,
+                                            "problem": "Tersimpan · menunggu perangkat terdeteksi"})
                 snap["decoder"]["devices"] = [
                     dict(device, gain=(cfg.decoder_devices.get(device["serial"], {})
                                        .get("gain", cfg.decoder_gain)),
                          active=device["serial"] == cfg.decoder_device_serial and
                                 bool(cfg.decoder_devices.get(device["serial"], {}).get("enabled")))
-                    for device in snap["decoder"].get("device", {}).get("devices", [])]
+                    for device in visible_devices]
                 snap["settings"].update({
                     "track_name": cfg.track_name,
                     "event_name": cfg.event_name,
@@ -751,6 +759,9 @@ def make_handler(ctx: AppContext):
                     if path == "/api/event/stage/remove":
                         return self._json({"ok": True, "event": store.remove_stage(
                             event_id, str(data.get("stage_id") or ""))})
+                    if path == "/api/event/stage/move":
+                        return self._json({"ok": True, "event": store.move_stage(
+                            event_id, str(data.get("stage_id") or ""), data.get("direction"))})
                     if path == "/api/event/stage/start":
                         stage_id = str(data.get("stage_id") or "")
                         event, stage = store.stage(event_id, stage_id)

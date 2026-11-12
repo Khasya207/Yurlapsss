@@ -72,6 +72,31 @@ class DecoderSelectionTest(unittest.TestCase):
             manager.stop()
             manager.join(timeout=1)
 
+    def test_quiet_decoder_is_not_treated_as_missing_usb(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             patch("app.decoder_manager.default_data_dir", return_value=Path(folder)):
+            manager = DecoderManager(Config(), DummyEngine())
+            manager.status.started_at = 1
+            manager._log_path.write_text("=== old start\nno supported devices\n=== current start\n")
+            self.assertFalse(manager._waiting_for_dongle())
+            manager._log_path.write_text("=== current start\nno supported devices\n")
+            self.assertTrue(manager._waiting_for_dongle())
+
+    def test_temporary_usb_scan_miss_keeps_running_decoder(self):
+        with tempfile.TemporaryDirectory() as folder, \
+             patch("app.decoder_manager.default_data_dir", return_value=Path(folder)):
+            manager = DecoderManager(Config(), DummyEngine())
+            process = type("Process", (), {"poll": lambda self: None})()
+            manager._proc = process
+            manager.device_changed(True)
+            with patch.object(manager, "_kill_process") as kill, \
+                 patch.object(manager, "restart_now") as restart:
+                manager.device_changed(False)
+                manager.device_changed(True)
+            kill.assert_not_called()
+            restart.assert_not_called()
+            self.assertIs(manager._proc, process)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -286,6 +286,21 @@ class EventStore:
                 item["sequence"] = index
             return self._save(event)
 
+    def move_stage(self, event_id, stage_id, direction):
+        with self.club.lock:
+            event, stage = self.stage(event_id, stage_id)
+            if stage["status"] != "planned" or direction not in ("up", "down"):
+                raise ValueError("Hanya sesi terjadwal yang dapat dipindah")
+            stages = event["stages"]
+            index = next(i for i, item in enumerate(stages) if item["id"] == stage_id)
+            neighbor = index + (-1 if direction == "up" else 1)
+            if neighbor < 0 or neighbor >= len(stages) or stages[neighbor]["status"] != "planned":
+                raise ValueError("Sesi tidak dapat dipindah melewati sesi berjalan atau tersimpan")
+            stages[index], stages[neighbor] = stages[neighbor], stages[index]
+            for number, item in enumerate(stages, 1):
+                item["sequence"] = number
+            return self._save(event)
+
     def mark_stage(self, event_id, stage_id, status, race_id=None):
         with self.club.lock:
             event, stage = self.stage(event_id, stage_id)

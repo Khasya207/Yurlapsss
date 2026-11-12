@@ -129,7 +129,7 @@ def test_manager_autorestart():
 
 
 def test_manager_idle_detect():
-    print("\nDeteksi decoder macet (tidak ada data)")
+    print("\nDecoder hidup tanpa passing tidak di-restart")
     cfg = Config.load()
     cfg.manage_decoder = True
     cfg.decoder_args = ""
@@ -138,7 +138,7 @@ def test_manager_idle_detect():
     cfg.decoder_device_serial = "YD-TEST"
     cfg.decoder_devices = {"YD-TEST": {"enabled": True, "gain": cfg.decoder_gain}}
 
-    # skrip yang hidup tapi tidak pernah mengirim data -> harus di-restart
+    # Tidak ada passing selama beberapa detik adalah keadaan normal.
     path = Path(DATA) / "bin" / "openstint_silent"
     path.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(60)\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
@@ -148,9 +148,9 @@ def test_manager_idle_detect():
     mgr = DecoderManager(cfg, eng)
     mgr.device_changed(True)
     mgr.start()
-    time.sleep(9.0)
-    check(mgr.status.restarts >= 1,
-          f"decoder tanpa data di-restart ({mgr.status.restarts}×)")
+    time.sleep(6.0)
+    check(mgr.status.restarts == 0 and mgr.status.running,
+          f"decoder tanpa passing tetap hidup ({mgr.status.restarts} restart)")
     mgr.stop()
 
 
