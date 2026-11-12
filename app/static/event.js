@@ -152,12 +152,12 @@ function renderTiming(){
   const ready=entrants.filter(entry=>entry.approved&&entry.checked_in);
   const action=stage.status==='planned'&&selected.status==='running'&&race?.status==='idle'
     ? `<button class="btn primary" data-stage-action="start" data-id="${esc(stage.id)}" ${!ready.length?'disabled':''}>Mulai sesi</button>`
-    : stage.status==='live'&&race?.status!=='idle'
+    : stage.status==='live'&&['live','paused','done'].includes(race?.status)
       ? `<button class="btn fin" data-stage-action="save" data-id="${esc(stage.id)}">Selesai & simpan</button>`
       : stage.status==='live'&&race?.status==='idle'
         ? `<button class="btn" data-stage-action="retry" data-id="${esc(stage.id)}">Jalankan ulang</button>`
         : saved ? `<button class="btn" data-stage-action="reset" data-id="${esc(stage.id)}">Siap sesi berikutnya</button>` : '';
-  $('eventTiming').innerHTML=`<div class="event-row"><div><b>${esc(stage.name)}</b><div class="event-muted">${esc(className(stage.class_id))} · ${esc(stage.group)} · ${esc(kindName(stage.kind))} · ${ready.length}/${entrants.length} check-in</div></div><div class="actions">${action}</div></div>${stage.status==='planned'&&selected.status!=='running'?'<p class="note">Mulai Event di tab Meeting sebelum menjalankan sesi.</p>':''}${stage.status==='planned'&&!ready.length?'<p class="note">Setujui dan check-in peserta di tab Drivers sebelum memulai.</p>':''}`;
+  $('eventTiming').innerHTML=`<div class="event-row"><div><b>${esc(stage.name)}</b><div class="event-muted">${esc(className(stage.class_id))} · ${esc(stage.group)} · ${esc(kindName(stage.kind))} · ${ready.length}/${entrants.length} check-in</div></div><div class="actions">${action}</div></div>${race?.status==='countdown'&&stage.status==='live'?'<p class="note">Countdown berjalan. Tombol simpan tersedia setelah GO.</p>':''}${stage.status==='planned'&&selected.status!=='running'?'<p class="note">Mulai Event di tab Meeting sebelum menjalankan sesi.</p>':''}${stage.status==='planned'&&!ready.length?'<p class="note">Setujui dan check-in peserta di tab Drivers sebelum memulai.</p>':''}`;
 }
 function kindName(kind){return {practice:'Practice',qualifying:'Qualifier',heat:'Heat',main:'Main',final:'Final'}[kind]||kind;}
 function render(){
