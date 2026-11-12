@@ -49,6 +49,8 @@ class EventTests(unittest.TestCase):
         self.assertEqual([s["name"] for s in moved["stages"]], ["Q2", "Q1"])
         self.assertEqual([s["sequence"] for s in moved["stages"]], [1, 2])
         self.store.mark_stage(self.event["id"], second["id"], "live")
+        with self.assertRaisesRegex(ValueError, "Selesaikan sesi Event"):
+            self.store.mark_stage(self.event["id"], first["id"], "live")
         with self.assertRaisesRegex(ValueError, "melewati"):
             self.store.move_stage(self.event["id"], first["id"], "up")
 

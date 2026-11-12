@@ -460,6 +460,8 @@ class EventStore:
             event, stage = self.stage(event_id, stage_id)
             if status == "live" and stage["status"] != "planned":
                 raise ValueError("Sesi ini sudah pernah dijalankan")
+            if status == "live" and self.live_stage():
+                raise ValueError("Selesaikan sesi Event yang sedang berjalan dahulu")
             if status == "saved" and stage["status"] != "live":
                 raise ValueError("Sesi belum berjalan")
             if status not in ("live", "saved"):

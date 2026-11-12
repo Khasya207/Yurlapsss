@@ -3,7 +3,7 @@
 const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const token=new URLSearchParams(location.search).get('t');
-let events=[], selected=null, results=[], standings=[], members=[], tracks=[], presets=[], race=null, sync=null, pane='meeting';
+let events=[], selected=null, results=[], standings=[], members=[], tracks=[], presets=[], race=null, sync=null, pane='meeting', timingStageId=null;
 let timer=null;
 
 async function api(path,body){
@@ -34,7 +34,8 @@ async function load(preferred){
   if(target&&events.some(e=>e.id===target)){
     const detail=await api('/api/event/detail?id='+encodeURIComponent(target));
     selected=detail.event;results=detail.results||[];standings=detail.standings||[];race=detail.race;sync=detail.sync;
-  }else{selected=null;results=[];standings=[];race=null;sync=null;}
+    if(timingStageId&&!selected.stages.some(stage=>stage.id===timingStageId&&stage.status==='planned'))timingStageId=null;
+  }else{selected=null;results=[];standings=[];race=null;sync=null;timingStageId=null;}
   render();
 }
 function renderTabs(){
@@ -109,7 +110,7 @@ function renderStages(){
   $('eventStagePreset').innerHTML='<option value="">Atur langsung di bawah</option>'+presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${p.target==='laps'?esc(p.value)+' lap':esc(p.value)+' detik'}</option>`).join('');
   renderStageEntries();
   const stages=selected?.stages||[];
-  $('eventStages').innerHTML=stages.length?stages.map(s=>`<div class="event-row"><div><b>${esc(s.sequence)}. ${esc(s.name)}</b><div class="event-muted">${esc(className(s.class_id))} · ${esc(s.group)} · ${esc(s.kind)} · ${s.entry_ids.length?s.entry_ids.length+' peserta':'semua peserta kelas'}</div><small class="event-status">${s.status==='saved'?'Hasil tersimpan':s.status==='live'?(race?.status==='idle'?'Timing terputus':'Sedang berjalan'):'Terjadwal'}</small></div><div class="actions">${s.status==='planned'?`<button class="btn sm" data-stage-action="move" data-direction="up" data-id="${esc(s.id)}" aria-label="Naikkan ${esc(s.name)}">↑</button><button class="btn sm" data-stage-action="move" data-direction="down" data-id="${esc(s.id)}" aria-label="Turunkan ${esc(s.name)}">↓</button><button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus</button>`:''}</div></div>`).join(''):'<p class="note">Belum ada sesi. Tambahkan kualifikasi, heat, main, atau final sesuai format event.</p>';
+  $('eventStages').innerHTML=stages.length?stages.map(s=>`<div class="event-row"><div><b>${esc(s.sequence)}. ${esc(s.name)}</b><div class="event-muted">${esc(className(s.class_id))} · ${esc(s.group)} · ${esc(kindName(s.kind))} · ${s.entry_ids.length?s.entry_ids.length+' peserta':'semua peserta kelas'}</div><small class="event-status">${s.status==='saved'?'Hasil tersimpan':s.status==='live'?(race?.status==='idle'?'Timing terputus':'Sedang berjalan'):'Terjadwal'}</small></div><div class="actions">${s.status==='planned'?`<button class="btn sm" data-stage-action="prepare" data-id="${esc(s.id)}">Buka Timing</button><button class="btn sm" data-stage-action="move" data-direction="up" data-id="${esc(s.id)}" aria-label="Naikkan ${esc(s.name)}">↑</button><button class="btn sm" data-stage-action="move" data-direction="down" data-id="${esc(s.id)}" aria-label="Turunkan ${esc(s.name)}">↓</button><button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus</button>`:''}</div></div>`).join(''):'<p class="note">Belum ada sesi. Tambahkan kualifikasi, heat, main, atau final sesuai format event.</p>';
   $('eventStageForm').hidden=!selected||selected.status==='completed';
 }
 function renderStageEntries(){
@@ -128,13 +129,21 @@ function renderLive(){
   const live=selected?.stages.find(s=>s.status==='live');
   if(!live){$('eventLive').innerHTML='<p class="note">Tidak ada sesi Event yang sedang berjalan.</p>';return;}
   const rows=race?.klasemen||[];
-  $('eventLive').innerHTML=`<p><b>${esc(live.name)}</b><br><span class="event-status">${esc(race?.status||'memuat')}</span></p><div class="event-board"><table><thead><tr><th>Pos</th><th>Driver</th><th class="r">Lap</th><th class="r">Best</th></tr></thead><tbody>${rows.map((d,i)=>`<tr><td>${esc(d.pos??i+1)}</td><td>${esc(d.nick||d.name)}</td><td class="r">${esc(d.n_lap??d.laps?.length??0)}</td><td class="r">${fmt(d.best_ms)}</td></tr>`).join('')}</tbody></table></div><p class="event-muted">Timing menggunakan decoder dan mesin race YurLaps.</p>`;
+  const state={countdown:'Countdown',live:'Berjalan',done:'Selesai',paused:'Dijeda'}[race?.status]||'Memuat';
+  const clock=race?.status==='countdown'&&race.countdown_value!=null
+    ? String(race.countdown_value) : fmt(race?.elapsed_ms);
+  const remaining=race?.cfg?.target==='time'?`<span>Sisa ${fmt(race.sisa_ms)}</span>`:'';
+  const passings=(race?.log||[]).slice(0,8);
+  $('eventLive').innerHTML=`<div class="event-timing-strip"><div><strong>${esc(live.name)}</strong><span>${esc(className(live.class_id))} · ${esc(live.group)}</span></div><div class="event-timing-clock"><b>${esc(clock)}</b><small>${esc(state)}</small></div>${remaining}</div>
+    ${race?.clock_stale&&race.status==='live'?'<p class="note">Belum ada data waktu terbaru dari decoder. Sesi tetap berjalan.</p>':''}
+    <div class="event-board"><table><thead><tr><th>Pos</th><th>Driver</th><th>Status</th><th class="r">Lap</th><th class="r">Total</th><th class="r">Best lap</th></tr></thead><tbody>${rows.map((d,i)=>`<tr><td>${esc(d.pos??i+1)}</td><td>${esc(d.nick||d.name)}<small style="display:block">${esc(d.transponder??'')}</small></td><td>${d.finish_decoder_ts!=null?'FIN':d.first_decoder_ts==null?'Belum start':'LIVE'}</td><td class="r">${esc(d.n_lap??d.laps?.length??0)}</td><td class="r">${fmt(d.elapsed_ms)}</td><td class="r">${fmt(d.best_ms)}</td></tr>`).join('')}</tbody></table></div>
+    <h3 class="event-passing-title">Passing terbaru</h3>${passings.length?`<div class="event-board"><table><thead><tr><th>Driver</th><th>Status</th><th class="r">Lap</th><th class="r">RSSI</th><th class="r">Hit</th></tr></thead><tbody>${passings.map(p=>`<tr><td>${esc(p.nama||p.transponder)}</td><td>${esc(p.alasan||({origin:'Start',lap:'Lap',finished:'Setelah finish',ignored:'Diabaikan'}[p.status]||p.status||'—'))}</td><td class="r">${esc(p.lap??'—')}</td><td class="r">${p.rssi==null?'—':esc(Number(p.rssi).toFixed(1))}</td><td class="r">${esc(p.hit_count??'—')}</td></tr>`).join('')}</tbody></table></div>`:'<p class="note">Belum ada passing pada sesi ini.</p>'}`;
 }
 function renderTiming(){
   const stages=selected?.stages||[];
   const live=stages.find(stage=>stage.status==='live');
   const saved=stages.find(stage=>stage.status==='saved'&&race?.status==='done'&&race?.saved_id===stage.race_id);
-  const next=stages.find(stage=>stage.status==='planned');
+  const next=stages.find(stage=>stage.id===timingStageId&&stage.status==='planned')||stages.find(stage=>stage.status==='planned');
   const stage=live||saved||next;
   if(!selected){$('eventTiming').innerHTML='<p class="note">Pilih Event untuk menjalankan sesi.</p>';return;}
   if(!stage){$('eventTiming').innerHTML='<p class="note">Belum ada sesi siap. Susun sesi di Schedule.</p>';return;}
@@ -148,8 +157,9 @@ function renderTiming(){
       : stage.status==='live'&&race?.status==='idle'
         ? `<button class="btn" data-stage-action="retry" data-id="${esc(stage.id)}">Jalankan ulang</button>`
         : saved ? `<button class="btn" data-stage-action="reset" data-id="${esc(stage.id)}">Siap sesi berikutnya</button>` : '';
-  $('eventTiming').innerHTML=`<div class="event-row"><div><b>${esc(stage.name)}</b><div class="event-muted">${esc(className(stage.class_id))} · ${esc(stage.group)} · ${esc(stage.kind)} · ${ready.length}/${entrants.length} check-in</div></div><div class="actions">${action}</div></div>${stage.status==='planned'&&!ready.length?'<p class="note">Setujui dan check-in peserta di tab Peserta sebelum memulai.</p>':''}`;
+  $('eventTiming').innerHTML=`<div class="event-row"><div><b>${esc(stage.name)}</b><div class="event-muted">${esc(className(stage.class_id))} · ${esc(stage.group)} · ${esc(kindName(stage.kind))} · ${ready.length}/${entrants.length} check-in</div></div><div class="actions">${action}</div></div>${stage.status==='planned'&&selected.status!=='running'?'<p class="note">Mulai Event di tab Meeting sebelum menjalankan sesi.</p>':''}${stage.status==='planned'&&!ready.length?'<p class="note">Setujui dan check-in peserta di tab Drivers sebelum memulai.</p>':''}`;
 }
+function kindName(kind){return {practice:'Practice',qualifying:'Qualifier',heat:'Heat',main:'Main',final:'Final'}[kind]||kind;}
 function render(){
   renderTabs();renderList();renderCreate();
   $('eventTitle').textContent=selected?.name||'Pilih event';
@@ -165,7 +175,7 @@ async function mutate(path,body){try{await api(path,body);await load(selected?.i
 document.querySelectorAll('[data-event-pane-tab]').forEach(button=>button.onclick=()=>{pane=button.dataset.eventPaneTab;renderTabs();});
 document.addEventListener('click',async event=>{
   const select=event.target.closest('[data-event-select]');
-  if(select){try{await load(select.dataset.eventSelect);pane='meeting';renderTabs();}catch(error){fail(error);}return;}
+  if(select){try{timingStageId=null;await load(select.dataset.eventSelect);pane='meeting';renderTabs();}catch(error){fail(error);}return;}
   const edit=event.target.closest('[data-competition-edit]');
   if(edit&&selected){
     const c=selected.classes.find(x=>x.id===edit.dataset.competitionEdit),cfg=competitionConfig(c);
@@ -225,6 +235,9 @@ document.addEventListener('click',async event=>{
   }
   const stage=event.target.closest('[data-stage-action]');
   if(stage&&selected){
+    if(stage.dataset.stageAction==='prepare'){
+      timingStageId=stage.dataset.id;pane='timing';renderTiming();renderTabs();return;
+    }
     if(stage.dataset.stageAction==='save'&&!window.confirm('Akhiri sesi timing dan simpan hasilnya?'))return;
     await mutate('/api/event/stage/'+stage.dataset.stageAction,{event_id:selected.id,stage_id:stage.dataset.id,
       direction:stage.dataset.direction});

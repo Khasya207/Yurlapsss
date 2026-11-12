@@ -46,6 +46,16 @@ EXE_NAMES = ("YurLapsDecoder.exe", "YurLapsDecoder",
 RETRY_SECONDS = 5.0
 
 
+def public_decoder_log(line: str) -> str:
+    """Keep decoder diagnostics while presenting the YurLaps device name."""
+    for old, new in (("RTL-SDR Blog V4", "YurLaps Decoder"),
+                     ("RTL-SDR", "YurLaps Decoder"),
+                     ("OpenStint", "YurLaps Decoder"),
+                     ("openstint", "YurLaps Decoder")):
+        line = line.replace(old, new)
+    return line
+
+
 def exe_names() -> tuple[str, ...]:
     """Urutan pencarian biner sesuai platform (di Linux/Mac tanpa .exe)."""
     if IS_WINDOWS:
@@ -262,13 +272,13 @@ class DecoderManager(threading.Thread):
         try:
             with open(self._log_path, "ab") as log:
                 log.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} mulai: "
-                          f"{' '.join(cmd)}\n".encode())
+                          f"{exe.name} {' '.join(args)}\n".encode())
                 log.flush()
                 flags = 0
                 if IS_WINDOWS:
                     flags = 0x08000000 | 0x00000200   # NO_WINDOW | NEW_PROCESS_GROUP
                 proc = subprocess.Popen(
-                    cmd, stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                    cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
                     cwd=str(exe.parent), env=env, creationflags=flags,
                 )
         except FileNotFoundError:
@@ -290,6 +300,7 @@ class DecoderManager(threading.Thread):
 
         with self._lock:
             self._proc = proc
+        threading.Thread(target=self._record_decoder_log, args=(proc,), daemon=True).start()
         self._publish(running=True, pid=proc.pid, exe=str(exe), started_at=time.time(),
                       state="starting", last_error="", args=args, freq_hz=None,
                       gain=float(self.cfg.decoder_gain or 0) or None,
@@ -298,6 +309,18 @@ class DecoderManager(threading.Thread):
                                 + (f" ({' '.join(args)})" if args else ""))
         threading.Thread(target=self._wait_radio_line, daemon=True).start()
         return True
+
+    def _record_decoder_log(self, proc: subprocess.Popen) -> None:
+        stream = proc.stdout
+        if stream is None:
+            return
+        try:
+            with stream, open(self._log_path, "ab") as log:
+                for raw in iter(stream.readline, b""):
+                    log.write(public_decoder_log(raw.decode("utf-8", "replace")).encode("utf-8"))
+                    log.flush()
+        except OSError:
+            pass
 
     def _waiting_for_dongle(self) -> bool:
         """Proses decoder hidup tapi belum/tidak lagi membuka perangkatnya.
@@ -345,10 +368,12 @@ class DecoderManager(threading.Thread):
             return
         freq = None
         for line in text.splitlines()[-40:]:
-            i = line.find("RTL-SDR RX: freq=")
+            marker = next((name for name in ("YurLaps Decoder RX: freq=", "RTL-SDR RX: freq=")
+                          if name in line), None)
+            i = line.find(marker) if marker else -1
             if i >= 0:
                 try:
-                    freq = float(line[i + len("RTL-SDR RX: freq="):].split()[0])
+                    freq = float(line[i + len(marker):].split()[0])
                 except (ValueError, IndexError):
                     pass
         if freq is not None and freq != self.status.freq_hz:
@@ -361,7 +386,7 @@ class DecoderManager(threading.Thread):
                 size = fh.tell()
                 fh.seek(max(0, size - 4000))
                 lines = fh.read().decode("utf-8", "replace").strip().splitlines()
-            return " | ".join(l.strip() for l in lines[-n:] if l.strip())
+            return " | ".join(public_decoder_log(l.strip()) for l in lines[-n:] if l.strip())
         except Exception:
             return ""
 
@@ -373,7 +398,7 @@ class DecoderManager(threading.Thread):
             return
 
         self._publish(mode="managed", state="starting",
-                      message="Mencari biner decoder OpenStint …")
+                      message="Mencari YurLaps Decoder …")
 
         while not self._stop_event.is_set():
             if self._proc is None and self.engine.decoder_online:
@@ -406,7 +431,7 @@ class DecoderManager(threading.Thread):
                     continue
                 hint = ("Letakkan biner YurLaps Decoder di folder bin/ atau "
                         "aktifkan unduh otomatis." if self.auto_download_supported
-                        else "Rilis resmi OpenStint hanya menyediakan biner Windows. "
+                        else "Biner YurLaps Decoder hanya tersedia untuk Windows. "
                              "Di sistem ini, kompilasi sendiri lalu letakkan "
                              "binernya di folder bin/.")
                 self._publish(state="error", running=False,
@@ -523,7 +548,7 @@ class DecoderManager(threading.Thread):
                         shutil.move(str(found), str(target_dir / name))
                     if not IS_WINDOWS:
                         os.chmod(target_dir / name, 0o755)
-            self.engine.log("ok", "Decoder OpenStint siap dipakai")
+            self.engine.log("ok", "YurLaps Decoder siap dipakai")
             self._publish(state="idle", message="Decoder siap dijalankan.")
         except Exception as exc:
             self._publish(state="error",

@@ -778,6 +778,8 @@ def make_handler(ctx: AppContext):
                         event, stage = store.stage(event_id, stage_id)
                         if event["status"] != "running" or stage["status"] != "planned":
                             raise ValueError("Event atau sesi belum siap dijalankan")
+                        if store.live_stage():
+                            raise ValueError("Selesaikan sesi Event yang sedang berjalan dahulu")
                         if ctx.race.status != "idle":
                             raise ValueError("Selesaikan dan reset sesi timing sebelumnya")
                         chosen = set(stage["entry_ids"])
@@ -938,7 +940,7 @@ def make_handler(ctx: AppContext):
                 return self._json({"ok": True, "race": snap})
 
             if path == "/api/race/pass":
-                return self._err(409, "Pencatatan race hanya menerima lintasan OpenStint.")
+                return self._err(409, "Pencatatan race hanya menerima passing dari YurLaps Decoder.")
 
             if path == "/api/race/finish":
                 try:
@@ -1271,7 +1273,7 @@ def make_handler(ctx: AppContext):
                     "ok": True, "gain": applied, "restarted": restarted,
                     "state": engine.snapshot(),
                     "message": (f"Gain {applied:g} dB disimpan. "
-                                "openstint.exe dijalankan ulang otomatis."
+                                "YurLaps Decoder dijalankan ulang otomatis."
                                 if restarted else
                                 f"Gain {applied:g} dB disimpan. Decoder tidak "
                                 "sedang dikelola YurLaps, jadi tidak di-restart."),
