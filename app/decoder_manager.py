@@ -272,7 +272,7 @@ class DecoderManager(threading.Thread):
         try:
             with open(self._log_path, "ab") as log:
                 log.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} mulai: "
-                          f"YurLaps Decoder {' '.join(args)}\n".encode())
+                          f"{exe.name} {' '.join(args)}\n".encode())
                 log.flush()
                 flags = 0
                 if IS_WINDOWS:
@@ -411,12 +411,12 @@ class DecoderManager(threading.Thread):
             profile = (self.cfg.decoder_devices or {}).get(serial, {})
             if not serial or not profile.get("enabled"):
                 self._publish(state="waiting", running=False, pid=None,
-                              message="Pilih Decoder ID di menu Decoder lalu aktifkan.")
+                              message="Pilih serial RTL-SDR di menu Decoder lalu aktifkan.")
                 self._wait(RETRY_SECONDS)
                 continue
             if self._device_present is not True:
                 self._publish(state="waiting", running=False, pid=None,
-                              message=f"Menunggu YurLaps Decoder {serial} dicolokkan …")
+                              message=f"Menunggu RTL-SDR {serial} dicolokkan …")
                 self._wait(RETRY_SECONDS)
                 continue
             exe = self.find_decoder()
