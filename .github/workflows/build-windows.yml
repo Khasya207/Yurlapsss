@@ -156,26 +156,23 @@ jobs:
           git -c advice.detachedHead=false clone --depth 1 --branch v1.7.0 \
             https://github.com/jgaeddert/liquid-dsp.git liquid-dsp
           cd liquid-dsp
-          if [ -x ./bootstrap.sh ]; then
-            ./bootstrap.sh
-          else
-            autoreconf -fi
+          # Autotools upstream mengharuskan -lc/-lm dan header Unix. Pakai
+          # CMake upstream untuk membangun archive statik dengan compiler MinGW.
+          sed -i 's/add_library(${LIBNAME} SHARED/add_library(${LIBNAME} STATIC/' CMakeLists.txt
+          sed -i '/^target_link_libraries(${LIBNAME} c m)$/d' CMakeLists.txt
+          grep -Fq 'add_library(${LIBNAME} STATIC' CMakeLists.txt
+          if grep -Fq 'target_link_libraries(${LIBNAME} c m)' CMakeLists.txt; then
+            echo 'GAGAL: liquid-dsp masih menghubungkan libc/libm Unix'; exit 1
           fi
-          # Paksa autotools membedakan sistem build MSYS dari target MinGW.
-          # Tanpa --build, configure salah menganggap ini native build dan
-          # mencoba mencari libc MSYS sebagai libc target Windows.
-          # liquid-dsp menguji -lc secara eksplisit. Pada MinGW runtime C
-          # berasal dari msvcrt, sehingga tes -lc harus diberi hasil cache.
-          CONFIG_SITE=/dev/null \
-            ac_cv_lib_c_main=yes \
-            RANLIB=ranlib \
-            AR=ar \
-            ./configure \
-            --build=x86_64-pc-msys \
-            --host=x86_64-w64-mingw32 \
-            --prefix=/mingw64
-          make -j2
-          make install
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_EXAMPLES=OFF \
+            -DBUILD_AUTOTESTS=OFF \
+            -DBUILD_BENCHMARKS=OFF \
+            -DENABLE_SIMD=OFF
+          cmake --build build --parallel 2
+          install -Dm644 build/libliquid.a /mingw64/lib/libliquid.a
+          install -Dm644 include/liquid.h /mingw64/include/liquid/liquid.h
           test -f /mingw64/include/liquid/liquid.h
           test -f /mingw64/lib/libliquid.a
 
@@ -246,7 +243,7 @@ jobs:
         run: |
           set -eu
           cd upstream && rm -rf build staging .git && cd ..
-          zip -qr yurlaps-decoder-src.zip upstream
+          zip -qr yurlaps-decoder-src.zip upstream liquid-dsp/LICENSE
 
       - uses: actions/upload-artifact@v7
         with:
