@@ -97,7 +97,6 @@ jobs:
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-zeromq
             mingw-w64-x86_64-cppzmq
-            mingw-w64-x86_64-liquid-dsp
             mingw-w64-x86_64-libusb
             git
             make
@@ -148,6 +147,26 @@ jobs:
             echo "GAGAL: nama target tidak berubah menjadi YurLapsDecoder"; exit 1
           fi
           echo "OK: target decoder bernama YurLapsDecoder"
+
+      - name: Build liquid-dsp
+        shell: msys2 {0}
+        run: |
+          set -eu
+          rm -rf liquid-dsp
+          git clone --depth 1 --branch v1.7.0 \
+            https://github.com/jgaeddert/liquid-dsp.git liquid-dsp
+          cd liquid-dsp
+          if [ -x ./bootstrap.sh ]; then
+            ./bootstrap.sh
+          else
+            autoreconf -fi
+          fi
+          ./configure --prefix=/mingw64 --host=x86_64-w64-mingw32 \
+            --enable-static --disable-shared
+          make -j2
+          make install
+          test -f /mingw64/include/liquid/liquid.h
+          test -f /mingw64/lib/libliquid.a
 
       - name: Install libfec
         shell: msys2 {0}
