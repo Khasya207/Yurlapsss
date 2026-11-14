@@ -97,6 +97,7 @@ jobs:
             mingw-w64-x86_64-ninja
             mingw-w64-x86_64-zeromq
             mingw-w64-x86_64-cppzmq
+            mingw-w64-x86_64-liquid-dsp
             mingw-w64-x86_64-libusb
             git
             make
@@ -147,15 +148,6 @@ jobs:
             echo "GAGAL: nama target tidak berubah menjadi YurLapsDecoder"; exit 1
           fi
           echo "OK: target decoder bernama YurLapsDecoder"
-
-      - name: Install liquid-dsp
-        shell: msys2 {0}
-        run: |
-          set -eu
-          LIQUID=https://raw.githubusercontent.com/cjcliffe/CubicSDR/refs/heads/master/external/liquid-dsp
-          mkdir -p /mingw64/include/liquid
-          curl -sSfL -o /mingw64/include/liquid/liquid.h "$LIQUID/include/liquid/liquid.h"
-          curl -sSfL -o /mingw64/lib/libliquid.a        "$LIQUID/gcc/64/libliquid.a"
 
       - name: Install libfec
         shell: msys2 {0}
