@@ -21,11 +21,20 @@ from .engine import Engine, Passing
 
 
 class DecoderClient(threading.Thread):
-    def __init__(self, engine: Engine, endpoint: str, poll_ms: int = 250):
+    def __init__(self, engine: Engine, endpoint: str, poll_ms: int = 250,
+                 reorder_ms: int = 40, max_reorder_ms: int = 150):
         super().__init__(name="decoder-zmq", daemon=True)
         self.engine = engine
         self.endpoint = endpoint
         self.poll_ms = poll_ms
+        # OpenStint may finish estimating a later crossing first. Collect a
+        # short burst before dispatching by the decoder clock.
+        self.reorder_window = max(0.0, float(reorder_ms) / 1000.0)
+        self.max_reorder_window = max(self.reorder_window,
+                                      float(max_reorder_ms) / 1000.0)
+        self._reorder_enabled = False
+        self._pending_passings: list[tuple[float, Passing]] = []
+        self._pending_lock = threading.RLock()
         self._stop_event = threading.Event()
         self.connected = False
         self._got_message = False
@@ -48,14 +57,18 @@ class DecoderClient(threading.Thread):
         sock = ctx.socket(zmq.SUB)
         sock.setsockopt(zmq.SUBSCRIBE, b"")
         sock.setsockopt(zmq.LINGER, 0)
-        sock.setsockopt(zmq.RCVTIMEO, self.poll_ms)
+        # A short poll lets the reorder window expire even if no next packet
+        # arrives after a close finish.
+        sock.setsockopt(zmq.RCVTIMEO, min(self.poll_ms, 10))
         sock.connect(self.endpoint)
+        self._reorder_enabled = True
 
         last_connect_note = 0.0
         while not self._stop_event.is_set():
             try:
                 msg = sock.recv_string()
             except zmq.Again:
+                self._flush_pending()
                 if not self._got_message and time.monotonic() - last_connect_note > 20:
                     last_connect_note = time.monotonic()
                     self.engine.log(
@@ -68,7 +81,9 @@ class DecoderClient(threading.Thread):
                 continue
 
             self.process_message(msg)
+            self._flush_pending()
 
+        self._flush_pending(force=True)
         try:
             sock.close()
         except Exception:
@@ -85,21 +100,24 @@ class DecoderClient(threading.Thread):
             self._dispatch_message(msg)
             return True
         except Exception as exc:
-            self._last_error = str(exc)
-            logging.getLogger(__name__).exception("Decoder processing failed")
-            try:
-                from .config import default_data_dir
-                folder = default_data_dir()
-                folder.mkdir(parents=True, exist_ok=True)
-                with (folder / 'receiver-errors.log').open('a', encoding='utf-8') as log:
-                    log.write(time.strftime('%Y-%m-%d %H:%M:%S') + '\n' + traceback.format_exc() + '\n')
-            except OSError:
-                pass
-            try:
-                self.engine.log("error", "Passing gagal diproses; periksa hasil sesi: " + str(exc))
-            except Exception:
-                pass
+            self._report_processing_error(exc)
             return False
+
+    def _report_processing_error(self, exc: Exception) -> None:
+        self._last_error = str(exc)
+        logging.getLogger(__name__).exception("Decoder processing failed")
+        try:
+            from .config import default_data_dir
+            folder = default_data_dir()
+            folder.mkdir(parents=True, exist_ok=True)
+            with (folder / 'receiver-errors.log').open('a', encoding='utf-8') as log:
+                log.write(time.strftime('%Y-%m-%d %H:%M:%S') + '\n' + traceback.format_exc() + '\n')
+        except OSError:
+            pass
+        try:
+            self.engine.log("error", "Passing gagal diproses; periksa hasil sesi: " + str(exc))
+        except Exception:
+            pass
 
     def _dispatch_message(self, msg: str) -> None:
         if not self._got_message:
@@ -126,17 +144,70 @@ class DecoderClient(threading.Thread):
                     decoder_timecode=int(parts[1]),
                     raw=msg,
                 )
-                self.engine.on_passing(p)
+                if self._reorder_enabled and self.reorder_window > 0:
+                    with self._pending_lock:
+                        latest = max((item[1].decoder_timecode for item in self._pending_passings
+                                      if item[1].decoder_timecode is not None), default=None)
+                    if latest is not None and p.decoder_timecode is not None \
+                            and latest - p.decoder_timecode > 10_000:
+                        # A large clock jump is a new decoder epoch, not a
+                        # close crossing to sort with the old batch.
+                        self._flush_pending(force=True)
+                    with self._pending_lock:
+                        self._pending_passings.append((time.monotonic(), p))
+                    self._flush_pending()
+                else:
+                    self.engine.on_passing(p)
             elif kind == "S":
+                status_ts = _i(parts, 1)
+                with self._pending_lock:
+                    latest = max((item[1].decoder_timecode for item in self._pending_passings
+                                  if item[1].decoder_timecode is not None), default=None)
+                if latest is not None and status_ts is not None and latest - status_ts > 10_000:
+                    self._flush_pending(force=True)
+                self._flush_pending()
                 self.rx_counts["S"] += 1
                 self.engine.decoder_status_message(parts)
             elif kind == "T":
+                self._flush_pending()
                 self.rx_counts["T"] += 1
                 self.engine.on_timesync(parts)
             else:
                 self.rx_counts["bad"] += 1
         except (ValueError, IndexError):
             self.rx_counts["bad"] += 1
+
+    def _flush_pending(self, force: bool = False) -> None:
+        """Dispatch passing packets in decoder-clock order after the jitter window."""
+        if not self._reorder_enabled and not force:
+            return
+        now = time.monotonic()
+        with self._pending_lock:
+            if force:
+                ready = self._pending_passings[:]
+                self._pending_passings.clear()
+            else:
+                # Wait for silence after the newest packet, with a hard cap
+                # so a continuous stream cannot keep the batch forever.
+                if not self._pending_passings:
+                    return
+                newest = max(item[0] for item in self._pending_passings)
+                oldest = min(item[0] for item in self._pending_passings)
+                if (now - newest < self.reorder_window and
+                        now - oldest < self.max_reorder_window):
+                    return
+                ready = self._pending_passings[:]
+                self._pending_passings.clear()
+        ready.sort(key=lambda item: (item[1].decoder_timecode is None,
+                                     item[1].decoder_timecode if item[1].decoder_timecode is not None else 0,
+                                     item[0]))
+        for _, passing in ready:
+            try:
+                self.engine.on_passing(passing)
+            except Exception as exc:
+                # One failing callback must not kill the only subscriber or
+                # discard the remaining passings in the same batch.
+                self._report_processing_error(exc)
 
 
 def _i(parts: list[str], idx: int) -> Optional[int]:

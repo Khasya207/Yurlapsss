@@ -103,6 +103,8 @@ class Config:
     decoder_auto_download: bool = True # unduh rilis resmi kalau belum ada
     decoder_restart_max_delay: int = 30  # detik, batas backoff restart
     decoder_idle_restart: int = 15     # detik tanpa data ZMQ -> restart decoder
+    decoder_reorder_ms: int = 40      # jitter window sebelum passing diurutkan
+    decoder_reorder_max_ms: int = 150 # batas tunggu agar burst tidak menggantung
 
     # --- driver SDR (opsional) --------------------------------------------
     driver_vid: str = "0x0bda"         # RTL-SDR (Realtek)
