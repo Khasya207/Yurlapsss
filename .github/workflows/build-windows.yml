@@ -161,8 +161,13 @@ jobs:
           else
             autoreconf -fi
           fi
-          ./configure --prefix=/mingw64 --host=x86_64-w64-mingw32 \
-            --enable-static --disable-shared
+          # Paksa autotools membedakan sistem build MSYS dari target MinGW.
+          # Tanpa --build, configure salah menganggap ini native build dan
+          # mencoba mencari libc MSYS sebagai libc target Windows.
+          CONFIG_SITE=/dev/null ./configure \
+            --build=x86_64-pc-msys \
+            --host=x86_64-w64-mingw32 \
+            --prefix=/mingw64
           make -j2
           make install
           test -f /mingw64/include/liquid/liquid.h
