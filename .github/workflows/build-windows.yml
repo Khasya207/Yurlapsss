@@ -153,7 +153,7 @@ jobs:
         run: |
           set -eu
           rm -rf liquid-dsp
-          git clone --depth 1 --branch v1.7.0 \
+          git -c advice.detachedHead=false clone --depth 1 --branch v1.7.0 \
             https://github.com/jgaeddert/liquid-dsp.git liquid-dsp
           cd liquid-dsp
           if [ -x ./bootstrap.sh ]; then
@@ -164,7 +164,13 @@ jobs:
           # Paksa autotools membedakan sistem build MSYS dari target MinGW.
           # Tanpa --build, configure salah menganggap ini native build dan
           # mencoba mencari libc MSYS sebagai libc target Windows.
-          CONFIG_SITE=/dev/null ./configure \
+          # liquid-dsp menguji -lc secara eksplisit. Pada MinGW runtime C
+          # berasal dari msvcrt, sehingga tes -lc harus diberi hasil cache.
+          CONFIG_SITE=/dev/null \
+            ac_cv_lib_c_main=yes \
+            RANLIB=ranlib \
+            AR=ar \
+            ./configure \
             --build=x86_64-pc-msys \
             --host=x86_64-w64-mingw32 \
             --prefix=/mingw64
