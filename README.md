@@ -1,6 +1,6 @@
 # YurLaps 0.4.1
 
-YurLaps mencatat passing dari YurLaps Decoder/OpenStint, menjalankan Practice dan
+YurLaps mencatat passing dari YurLaps Decoder, menjalankan Practice dan
 Quick Race, menyimpan hasil lokal, lalu menyinkronkannya ke website YurLaps.
 Target installer: Windows 10/11 x64. Source Python juga dapat dijalankan sebagai
 server web lokal; dukungan hardware ARM memerlukan build dan pengujian tersendiri.

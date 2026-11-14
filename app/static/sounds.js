@@ -106,7 +106,10 @@ function processEvents(race){
     }else if(e.kind==='last_lap'&&settings.announce_last_lap&&name){
       say(`${name}${pos!=='off'&&e.position?' posisi '+e.position:''} last lap`);
     }else if(e.kind==='driver_finish'&&settings.announce_finish&&name){
-      say(`${name} finish${e.position?' posisi '+e.position:''}`);
+      // The packet can arrive after another packet with an earlier decoder
+      // timestamp. Its live position is provisional; announce final positions
+      // once from the session-level `finish` event below.
+      say(`${name} finish`);
     }else if(e.kind==='finish'&&settings.announce_finish){
       say('Race selesai');
       for(const row of e.results||[])if(ttsName(row)&&row.position)say(`${ttsName(row)} posisi ${row.position}`);

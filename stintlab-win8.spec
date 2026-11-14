@@ -23,10 +23,13 @@ hidden = collect_submodules("zmq") + [
 ]
 
 datas = [("app/static", "app/static")]
-# Komponen pihak ketiga opsional (lihat tools/fetch_vendor.py)
-for extra in ("vendor/win", "vendor/openstint"):
-    if os.path.isdir(extra):
-        datas.append((extra, extra))
+if os.path.isdir("vendor/win"):
+    datas.append(("vendor/win", "vendor/win"))
+decoder = "vendor/openstint"
+if os.path.isdir(decoder):
+    for name in os.listdir(decoder):
+        if name == "YurLapsDecoder.exe" or (name.lower().endswith(".dll") and "openstint" not in name.lower()):
+            datas.append((os.path.join(decoder, name), "vendor/decoder"))
 
 a = Analysis(
     ["run_stintlab_win8.py"],

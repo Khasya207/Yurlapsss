@@ -15,13 +15,14 @@ hidden = collect_submodules("zmq") + [
     "app.decoder_manager", "app.devices", "app.updater", "app.net", "app.native",
 ]
 
-# Komponen pihak ketiga (lihat tools/fetch_vendor.py):
-#   vendor/win/zadig.exe        -> pemasang driver WinUSB (libwdi, GPL-3.0)
-#   vendor/openstint/*.exe      -> decoder OpenStint (opsional, bisa unduh sendiri)
 datas = [("app/static", "app/static"), ("assets", "assets")]
-for extra in ("vendor/win", "vendor/openstint"):
-    if os.path.isdir(extra):
-        datas.append((extra, extra))
+if os.path.isdir("vendor/win"):
+    datas.append(("vendor/win", "vendor/win"))
+decoder = "vendor/openstint"
+if os.path.isdir(decoder):
+    for name in os.listdir(decoder):
+        if name == "YurLapsDecoder.exe" or (name.lower().endswith(".dll") and "openstint" not in name.lower()):
+            datas.append((os.path.join(decoder, name), "vendor/decoder"))
 # Tkinter DIPAKAI (UI native); pywebview/pythonnet tetap tidak dibundel.
 # PENTING: pywebview + pythonnet (clr) TIDAK dibundel.
 # Alasannya: pythonnet di dalam PyInstaller sering gagal dengan

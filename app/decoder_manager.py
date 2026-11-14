@@ -194,12 +194,16 @@ class DecoderManager(threading.Thread):
         """
         cands: list[Path] = []
         root = app_root()
+        cands.append(root / "vendor" / "decoder")
         cands.append(root / "vendor" / "openstint")
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
+            cands.append(Path(meipass) / "vendor" / "decoder")
             cands.append(Path(meipass) / "vendor" / "openstint")
+        cands.append(root / "_internal" / "vendor" / "decoder")
         cands.append(root / "_internal" / "vendor" / "openstint")
         # hasil build PyInstaller (mesin Electron) saat dijalankan dari repo
+        cands.append(root / "engine" / "_internal" / "vendor" / "decoder")
         cands.append(root / "engine" / "_internal" / "vendor" / "openstint")
         cands.append(self.bin_dir())
         seen, out = set(), []

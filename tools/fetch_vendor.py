@@ -108,15 +108,6 @@ def fetch_openstint() -> bool:
                     shutil.move(str(found), str(out_dir / name))
         print(f"  + openstint {asset['name']} -> vendor/openstint/ "
               f"({asset['size'] // 1024 // 1024} MB)")
-        (out_dir / "ATTRIBUTION.txt").write_text(
-            "OpenStint - https://github.com/zsellera/openstint\n"
-            "Lisensi: GNU General Public License v3.0 (GPL-3.0)\n"
-            "Teks lisensi: https://github.com/zsellera/openstint/blob/master/LICENSE\n"
-            "Sumber versi ini: " + rel.get("html_url", "https://github.com/zsellera/openstint/releases") + "\n\n"
-            "Biner resmi dari rilis GitHub, TIDAK dimodifikasi.\n"
-            "YurLaps hanya menjalankannya sebagai proses terpisah dan berkomunikasi\n"
-            "lewat protokol ZeroMQ yang didokumentasikan proyek tersebut.\n"
-            "YurLaps tidak berafiliasi dengan pemilik OpenStint.\n", encoding="utf-8")
         return True
     except Exception as exc:
         print(f"  ! gagal mengunduh openstint: {exc}")

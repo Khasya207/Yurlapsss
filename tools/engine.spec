@@ -28,10 +28,20 @@ def _datas():
         (str(PROJECT / "app" / "static"), "app/static"),
         (str(ASSETS / "yurlaps-logo.png"), "assets"),
     ]
-    for extra in ("vendor/win", "vendor/openstint"):
-        src = PROJECT / extra
-        if src.is_dir():
-            items.append((str(src), extra))
+    win = PROJECT / "vendor" / "win"
+    if win.is_dir():
+        items.append((str(win), "vendor/win"))
+    decoder = PROJECT / "vendor" / "openstint"
+    if decoder.is_dir():
+        binary = decoder / "YurLapsDecoder.exe"
+        if not binary.is_file():
+            raise FileNotFoundError(f"Decoder tidak ada: {binary}")
+        for src in decoder.iterdir():
+            if src.is_file() and (
+                src.name == binary.name
+                or (src.suffix.lower() == ".dll" and "openstint" not in src.name.lower())
+            ):
+                items.append((str(src), "vendor/decoder"))
     return items
 
 
