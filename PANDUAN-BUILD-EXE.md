@@ -24,8 +24,8 @@ artifact versi sebelumnya lalu menamainya sebagai versi baru.
 
 Prasyarat: Python 3.12 x64, Node.js 22, npm, dan binary decoder beserta DLL.
 Cara paling mudah memperoleh decoder adalah artifact `yurlaps-decoder` dari
-workflow yang sama. Salin `YurLapsDecoder.exe` dan DLL dari `decoder-out` ke
-`vendor/openstint`.
+workflow yang sama. Salin isi `decoder-out` ke `vendor/openstint` dan sertakan
+`ATTRIBUTION.txt` serta arsip sumber decoder GPL.
 
 Jalankan `build_exe.bat`. Script memasang `requirements.txt`, memverifikasi file,
 membangun `YurLapsEngine.exe`, kemudian menjalankan `npm ci` dan `npm run dist`

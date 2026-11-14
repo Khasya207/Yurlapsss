@@ -35,9 +35,11 @@ CHECKS = [
     ("desktop/src/main/updates.js", "prepare", "pembaruan menunggu penyimpanan"),
     ("desktop/src/preload/index.js", "contextBridge", "preload terisolasi"),
     ("tools/engine.spec", "app/static", "UI dibundel bersama mesin"),
-    ("tools/engine.spec", "vendor/decoder", "decoder ikut installer tanpa identitas folder asal"),
+    ("tools/engine.spec", "vendor/openstint", "decoder ikut installer"),
     ("run_stintlab.py", '"--app-window"', "launcher menggunakan UI lengkap"),
     (".github/workflows/build-windows.yml", "yurlaps-decoder-src.zip", "sumber decoder GPL ikut artifact"),
+    ("decoder/ATTRIBUTION.txt", "GPL-3.0", "atribusi decoder"),
+    ("vendor/openstint/ATTRIBUTION.txt", "yurlaps-decoder-src.zip", "atribusi terpasang bersama decoder"),
     ("app/static/assets/yurlaps-logo.png", None, "logo aplikasi"),
     ("assets/yurlaps.ico", None, "ikon installer"),
 ]

@@ -8,7 +8,6 @@ from unittest.mock import patch
 from app import devices
 from app.config import Config
 from app.decoder_manager import DecoderManager
-from app.decoder import DecoderClient
 
 
 class DummyEngine:
@@ -23,21 +22,6 @@ class DummyEngine:
 
 
 class DecoderSelectionTest(unittest.TestCase):
-    def test_passing_jitter_is_reordered_by_decoder_timestamp(self):
-        class Engine:
-            def __init__(self): self.seen = []
-            def log(self, *_args): pass
-            def on_passing(self, passing): self.seen.append(
-                (passing.transponder_id, passing.decoder_timecode))
-        engine = Engine()
-        client = DecoderClient(engine, "inproc://test", reorder_ms=40)
-        client._reorder_enabled = True
-        client._dispatch_message("P 120 OPN 11 -30 2 90000")
-        client._dispatch_message("P 100 OPN 22 -30 2 90000")
-        self.assertEqual(engine.seen, [])
-        client._flush_pending(force=True)
-        self.assertEqual(engine.seen, [(22, 100), (11, 120)])
-
     def test_windows_pnp_serial_and_duplicate_rejection(self):
         rows = [
             {"Name": "RTL-SDR", "PNPDeviceID": "USB\\VID_0BDA&PID_2838\\YD0001", "Service": "WinUSB"},

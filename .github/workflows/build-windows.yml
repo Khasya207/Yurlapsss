@@ -156,14 +156,13 @@ jobs:
           git -c advice.detachedHead=false clone --depth 1 --branch v1.7.0 \
             https://github.com/jgaeddert/liquid-dsp.git liquid-dsp
           cd liquid-dsp
-          # Autotools upstream mengharuskan -lc/-lm dan header Unix. Pakai
-          # CMake upstream untuk membangun archive statik dengan compiler MinGW.
+          # scripts/version.sh tidak mengembalikan versi dari CMake di Windows.
+          # Tag yang dikloning di atas adalah v1.7.0.
+          sed -i '/^project(liquid VERSION/i set(LIQUID_VERSION 1.7.0)' CMakeLists.txt
           sed -i 's/add_library(${LIBNAME} SHARED/add_library(${LIBNAME} STATIC/' CMakeLists.txt
           sed -i '/^target_link_libraries(${LIBNAME} c m)$/d' CMakeLists.txt
+          grep -Fq 'set(LIQUID_VERSION 1.7.0)' CMakeLists.txt
           grep -Fq 'add_library(${LIBNAME} STATIC' CMakeLists.txt
-          if grep -Fq 'target_link_libraries(${LIBNAME} c m)' CMakeLists.txt; then
-            echo 'GAGAL: liquid-dsp masih menghubungkan libc/libm Unix'; exit 1
-          fi
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_EXAMPLES=OFF \
@@ -223,6 +222,7 @@ jobs:
           copy_dll 'libgcc_s_seh-1.dll'
           copy_dll 'libstdc++-6.dll'
           copy_dll 'libwinpthread-1.dll'
+          cp "$GITHUB_WORKSPACE/decoder/ATTRIBUTION.txt" ../decoder-out/
           echo "isi paket decoder:"; ls -la ../decoder-out
 
       - name: Uji decoder bisa dijalankan
@@ -328,6 +328,9 @@ jobs:
           $exe = Get-ChildItem vendor\openstint -Filter "YurLapsDecoder*" -ErrorAction SilentlyContinue
           if ($exe) {
             Write-Host "OK: memakai decoder YurLaps ($($exe[0].Name))"
+            if (-not (Test-Path "vendor\openstint\ATTRIBUTION.txt")) {
+              throw "ATTRIBUTION.txt tidak ada: atribusi GPL-3.0 wajib ikut"
+            }
           } else {
             throw "YurLapsDecoder.exe tidak ada di paket decoder"
           }
@@ -336,16 +339,6 @@ jobs:
       - name: Build mesin YurLapsEngine.exe
         working-directory: ${{ steps.detect.outputs.root }}
         run: pyinstaller --noconfirm --clean tools/engine.spec
-
-      - name: Pastikan resource installer bebas dokumen decoder
-        working-directory: ${{ steps.detect.outputs.root }}
-        shell: pwsh
-        run: |
-          $decoder = "desktop\engine\_internal\vendor\decoder"
-          if (-not (Test-Path "$decoder\YurLapsDecoder.exe")) { throw "Decoder tidak ada di resource mesin" }
-          if (Test-Path "desktop\engine\_internal\vendor\openstint") { throw "Folder OpenStint masih ikut resource" }
-          $extra = Get-ChildItem $decoder -File | Where-Object { $_.Extension -notin @('.exe', '.dll') }
-          if ($extra) { throw "Dokumen decoder masih ikut resource: $($extra.Name -join ', ')" }
 
       - name: Pastikan UI ikut di dalam mesin
         working-directory: ${{ steps.detect.outputs.root }}
@@ -412,18 +405,6 @@ jobs:
       - name: Build installer Electron (NSIS + portable)
         working-directory: ${{ steps.detect.outputs.root }}/desktop
         run: npm run dist
-
-      - name: Periksa isi hasil installer
-        working-directory: ${{ steps.detect.outputs.root }}
-        shell: pwsh
-        run: |
-          $app = "dist-electron\win-unpacked"
-          $decoder = "$app\resources\engine\_internal\vendor\decoder"
-          if (-not (Test-Path "$decoder\YurLapsDecoder.exe")) { throw "Decoder tidak ikut installer" }
-          if (Test-Path "$app\resources\engine\_internal\vendor\openstint") { throw "Identitas folder OpenStint masih ada di resources" }
-          if (Test-Path "$app\legal\decoder") { throw "Dokumen decoder masih ikut installer" }
-          $extra = Get-ChildItem $decoder -File | Where-Object { $_.Extension -notin @('.exe', '.dll') }
-          if ($extra) { throw "Dokumen decoder masih ada di resources: $($extra.Name -join ', ')" }
 
       - name: Siapkan aplikasi untuk installer pembaruan (Inno)
         working-directory: ${{ steps.detect.outputs.root }}

@@ -106,9 +106,7 @@ def list_sdr_devices(vid: str = "0x0bda", pid: str = "0x2838") -> list[dict]:
     candidates = []
     base = getattr(sys, "_MEIPASS", None)
     for root in filter(None, [Path(base) if base else None,
-                              app_root(), app_root() / "vendor" / "decoder",
-                              app_root() / "_internal" / "vendor" / "decoder",
-                              app_root() / "vendor" / "openstint",
+                              app_root(), app_root() / "vendor" / "openstint",
                               app_root() / "_internal" / "vendor" / "openstint"]):
         for name in ("librtlsdr.dll", "rtlsdr.dll", "librtlsdr.so", "librtlsdr.dylib"):
             candidates.append(str(root / name))

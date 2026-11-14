@@ -9,7 +9,7 @@ Contoh:
     python tools/ambil_decoder.py --repo akun/yurlaps-decoder --tag v1.0.0
     python tools/ambil_decoder.py --file /path/ke/yurlaps-decoder-win64.zip
 
-Hasil: vendor/openstint/  berisi YurLapsDecoder.exe + DLL
+Hasil: vendor/openstint/  berisi YurLapsDecoder.exe + DLL + ATTRIBUTION.txt
 
 Repositori decoder boleh PRIVATE; skrip ini memakai GITHUB_TOKEN kalau ada
 (beri izin "Contents: Read" pada repo tersebut).
@@ -121,6 +121,10 @@ def main(argv=None) -> int:
             print("  ! YurLapsDecoder tidak ada di dalam zip", file=sys.stderr)
             return 1
         print(f"  ok: {exe[0].name}")
+        if not (VENDOR / "ATTRIBUTION.txt").is_file():
+            print("  ! ATTRIBUTION.txt tidak ikut di zip (wajib untuk GPL-3.0)",
+                  file=sys.stderr)
+            return 1
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
