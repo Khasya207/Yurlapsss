@@ -72,10 +72,11 @@ git apply --check ../decoder/patch/rename-target.patch
 git apply ../decoder/patch/rename-target.patch
 grep -q 'openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp' src/CMakeLists.txt
 ! grep -q 'rc4.cpp' src/CMakeLists.txt
-! grep -q 'match_preamble(p_rc3)' src/frame.cpp
+grep -q 'match_preamble(p_rc3)' src/frame.cpp
 ! grep -q 'match_preamble(p_rc4)' src/frame.cpp
-! grep -q 'rc4_trainer\|rc4_registry\|decode_rc3' src/commons.cpp
-echo "  sumber siap (YurLapsDecoder OPN saja)"
+grep -q 'decode_rc3' src/commons.cpp
+! grep -q 'rc4_trainer\|rc4_registry\|decode_vostok' src/commons.cpp
+echo "  sumber siap (YurLapsDecoder OPN + AMB RC3 lama)"
 "@
 
 Write-Host "== 3/4 liquid-dsp + libfec ==" -ForegroundColor Cyan

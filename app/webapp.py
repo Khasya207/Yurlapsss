@@ -535,14 +535,15 @@ def make_handler(ctx: AppContext):
                 return self._json({"ok": True, "presets": ctx.club.presets()})
 
             if path == "/api/event/list":
-                return self._json({"ok": True, "events": EventStore(ctx.club).list()})
+                return self._json({"ok": True, "events": EventStore(ctx.club).list(include_delete_conflicts=True)})
             if path == "/api/event/detail":
                 try:
                     event_id = (qs.get("id") or [""])[0]
                     store = EventStore(ctx.club)
-                    return self._json({"ok": True, "event": store.get(event_id),
-                                       "results": store.results(event_id),
-                                       "standings": store.standings(event_id),
+                    event = store.get(event_id, include_deleted=True)
+                    return self._json({"ok": True, "event": event,
+                                       "results": [] if event.get("deleted_at") else store.results(event_id),
+                                       "standings": [] if event.get("deleted_at") else store.standings(event_id),
                                        "sync": store.sync_state(event_id),
                                        "race": ctx.race.snapshot()})
                 except ValueError as exc:
@@ -736,6 +737,10 @@ def make_handler(ctx: AppContext):
                         event = store.create(data)
                         return self._json({"ok": True, "event": event})
                     event_id = str(data.get("event_id") or "")
+                    if path == "/api/event/meeting/update":
+                        return self._json({"ok": True, "event": store.update_meeting(event_id, data)})
+                    if path == "/api/event/meeting/delete":
+                        return self._json({"ok": True, "event": store.delete_meeting(event_id)})
                     if path == "/api/event/status":
                         return self._json({"ok": True, "event": store.set_status(event_id, data.get("status"))})
                     if path == "/api/event/competition/config":
@@ -767,6 +772,9 @@ def make_handler(ctx: AppContext):
                         return self._json({"ok": True, "stage": store.add_stage(event_id, data)})
                     if path == "/api/event/stage/remove":
                         return self._json({"ok": True, "event": store.remove_stage(
+                            event_id, str(data.get("stage_id") or ""))})
+                    if path == "/api/event/stage/repeat":
+                        return self._json({"ok": True, "stage": store.repeat_stage(
                             event_id, str(data.get("stage_id") or ""))})
                     if path == "/api/event/stage/move":
                         return self._json({"ok": True, "event": store.move_stage(
@@ -821,6 +829,15 @@ def make_handler(ctx: AppContext):
                             raise ValueError("Sesi timing masih aktif; selesaikan dahulu")
                         return self._json({"ok": True, "stage": store.retry_interrupted_stage(
                             event_id, str(data.get("stage_id") or ""))})
+                    if path == "/api/event/stage/discard":
+                        event, stage = store.stage(event_id, str(data.get("stage_id") or ""))
+                        if stage["status"] != "live" or ctx.race.status == "idle":
+                            raise ValueError("Tidak ada sesi aktif yang dapat dibatalkan")
+                        with ctx._club_lock:
+                            ctx.race.buang()
+                            ctx.race.reset()
+                            retried = store.retry_interrupted_stage(event_id, stage["id"])
+                        return self._json({"ok": True, "stage": retried})
                     return self._err(404, "Rute event tidak ditemukan")
                 except (ValueError, TypeError, KeyError) as exc:
                     return self._err(409, str(exc))

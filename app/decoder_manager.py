@@ -8,7 +8,7 @@ Perilaku yang diinginkan (dan diimplementasikan di sini):
 * Kalau decoder mati (YurLaps Decoder terputus, crash, USB reset), percobaan
   berikutnya dilakukan setelah 5 detik; pemasangan USB membangunkan supervisor.
 * Proses yang masih hidup tidak di-restart hanya karena belum ada passing.
-* Biner yang dijalankan harus menandai diri sebagai build OPN-only YurLaps.
+* Biner yang dijalankan harus menandai diri sebagai build OPN + AMB RC3 YurLaps.
 * Status lengkap (proses hidup? berapa kali restart? kenapa gagal?) tersedia
   untuk UI lewat `status()`.
 """
@@ -258,11 +258,11 @@ class DecoderManager(threading.Thread):
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    stdin=subprocess.DEVNULL, cwd=str(exe.parent),
                                    timeout=5, creationflags=0x08000000 if IS_WINDOWS else 0)
-            if check.returncode != 0 or b"YURLAPS_OPN_ONLY=1" not in check.stdout:
-                raise RuntimeError("Biner decoder belum mendukung mode OPN saja")
+            if check.returncode != 0 or b"YURLAPS_OPN_AMB_RC3=1" not in check.stdout:
+                raise RuntimeError("Biner decoder belum mendukung OPN dan AMB RC3")
         except Exception as exc:
             self._publish(state="error", running=False, last_error=str(exc),
-                          message="Decoder perlu dibangun ulang dengan patch OPN saja.")
+                          message="Decoder perlu dibangun ulang dengan patch OPN dan AMB RC3.")
             return False
         try:
             args = self.cfg.effective_decoder_args()
@@ -421,7 +421,7 @@ class DecoderManager(threading.Thread):
             exe = self.find_decoder()
 
             if exe is None:
-                hint = "Pasang paket aplikasi yang menyertakan YurLapsDecoder OPN saja."
+                hint = "Pasang paket aplikasi yang menyertakan YurLapsDecoder OPN dan AMB RC3."
                 self._publish(state="error", running=False,
                               message="Decoder belum tersedia. " + hint)
                 self._wait(RETRY_SECONDS)
@@ -501,15 +501,15 @@ class DecoderManager(threading.Thread):
         exe = self.find_decoder()
         if exe is None:
             return {"ok": False, "available": False,
-                    "message": "Biner YurLapsDecoder OPN saja belum ada di paket aplikasi.",
+                    "message": "Biner YurLapsDecoder OPN dan AMB RC3 belum ada di paket aplikasi.",
                     "output": ""}
         try:
             check = subprocess.run(command_for(exe) + ["--protocol-check"],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    stdin=subprocess.DEVNULL, cwd=str(exe.parent),
                                    timeout=5, creationflags=0x08000000 if IS_WINDOWS else 0)
-            if check.returncode != 0 or b"YURLAPS_OPN_ONLY=1" not in check.stdout:
-                return {"ok": False, "message": "Biner decoder bukan build OPN saja.",
+            if check.returncode != 0 or b"YURLAPS_OPN_AMB_RC3=1" not in check.stdout:
+                return {"ok": False, "message": "Biner decoder bukan build OPN dan AMB RC3.",
                         "output": ""}
         except Exception as exc:
             return {"ok": False, "message": f"Pemeriksaan decoder gagal: {exc}",

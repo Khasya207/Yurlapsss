@@ -1,8 +1,9 @@
 # Decoder YurLaps — satu repo dengan aplikasi
 
 Decoder **`YurLapsDecoder.exe`** dibangun dari sumber
-[OpenStint](https://github.com/zsellera/openstint) (GPL-3.0) dengan **satu patch**:
-nama target CMake diganti. Tidak ada perubahan pada algoritma deteksi.
+[OpenStint](https://github.com/zsellera/openstint) (GPL-3.0) dengan patch
+yang mengaktifkan OPN dan AMB RC3 lama. RC4, RC4 Hybrid, dan Vostok tidak
+diterima sebagai passing.
 
 Tidak perlu repo terpisah. Workflow di `.github/workflows/build-windows.yml`
 punya job **`decoder`** yang berjalan sebelum job `build`, dan hasilnya diunduh
@@ -16,7 +17,7 @@ repo YurLaps (private, satu saja)
 │     ├── job build            → mesin + Electron + installer   ← butuh decoder
 │     └── (jalur Windows 8 sudah dihapus — YurLaps kini Windows 10+)
 ├── decoder/
-│     ├── patch/rename-target.patch     patch OPN-only pada sumber
+│     ├── patch/rename-target.patch     patch OPN + AMB RC3 pada sumber
 │     ├── patch/upstream-ref.txt        versi OpenStint dikunci (v260830.1)
 │     ├── ATTRIBUTION.txt               atribusi GPL + sumber lengkap
 │     └── cara.ps1                      build manual di Windows
@@ -70,9 +71,9 @@ memakai versi itu — hasilnya bisa direproduksi.
 Kalau patch perlu diperbarui (mis. upstream mengubah `src/CMakeLists.txt`),
 perbarui `decoder/patch/rename-target.patch` dan uji dengan `cara.ps1`.
 
-## Soal patch perilaku deteksi
+## Perhitungan passing
 
-Belum dibuat, dan itu disengaja. Dari sumber `src/passing.cpp`, OpenStint
+Dari sumber `src/passing.cpp`, OpenStint
 menentukan titik lintasan sebagai:
 
 | Kondisi | Titik yang dipakai |

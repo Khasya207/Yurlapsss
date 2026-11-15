@@ -30,7 +30,8 @@ async function load(preferred){
     api('/api/event/list'),api('/api/tracks'),api('/api/members'),api('/api/presets')]);
   events=list.events||[];tracks=club.tracks||[];members=people.members||[];presets=settings.presets||[];
   window.YurLapsEventTimingLock?.(events.some(e=>e.stages.some(s=>s.status==='live')));
-  const target=preferred||selected?.id||events.find(e=>e.status==='running')?.id||events.find(e=>e.status!=='completed')?.id||events[0]?.id;
+  const target=preferred||selected?.id||events.find(e=>!e.deleted_at&&e.status==='running')?.id||
+    events.find(e=>!e.deleted_at&&e.status!=='completed')?.id||events.find(e=>!e.deleted_at)?.id||events[0]?.id;
   if(target&&events.some(e=>e.id===target)){
     const detail=await api('/api/event/detail?id='+encodeURIComponent(target));
     selected=detail.event;results=detail.results||[];standings=detail.standings||[];race=detail.race;sync=detail.sync;
@@ -46,15 +47,52 @@ function renderTabs(){
   document.querySelectorAll('[data-event-pane]').forEach(section=>{section.hidden=section.dataset.eventPane!==pane;});
 }
 function renderList(){
-  const active=events.filter(e=>e.status!=='completed');
-  const history=events.filter(e=>e.status==='completed');
+  const active=events.filter(e=>e.status!=='completed'&&!e.deleted_at);
+  const history=events.filter(e=>e.status==='completed'&&!e.deleted_at);
+  const deleteConflicts=events.filter(e=>e.deleted_at);
   $('eventMeetingCount').textContent=String(active.length);
   $('eventActiveList').innerHTML=active.length?active.map(e=>`<button class="event-item ${selected?.id===e.id?'on':''}" data-event-select="${esc(e.id)}"><b>${esc(e.name)}</b><small>${esc(e.track_name)} · ${esc(e.date||'Tanggal belum diisi')} · ${esc(e.status)}</small></button>`).join(''):'<div class="empty"><b>Belum ada meeting aktif</b>Buat meeting untuk memulai.</div>';
-  $('eventHistoryList').innerHTML=history.length?history.map(e=>`<button class="event-item" data-event-select="${esc(e.id)}"><b>${esc(e.name)}</b><small>${esc(e.track_name)} · ${esc(e.date||'—')} · ${e.stages.length} sesi</small></button>`).join(''):'<div class="empty"><b>Belum ada event selesai</b>Hasil resmi event akan muncul di sini.</div>';
+  $('eventHistoryList').innerHTML=(history.map(e=>`<button class="event-item ${selected?.id===e.id?'on':''}" data-event-select="${esc(e.id)}"><b>${esc(e.name)}</b><small>${esc(e.track_name)} · ${esc(e.date||'—')} · ${e.stages.length} sesi</small></button>`).join('')+
+    deleteConflicts.map(e=>`<button class="event-item ${selected?.id===e.id?'on':''}" data-event-select="${esc(e.id)}"><b>${esc(e.name)}</b><small>Penghapusan perlu diselesaikan</small></button>`).join(''))||'<div class="empty"><b>Belum ada event selesai</b>Hasil resmi event akan muncul di sini.</div>';
 }
 function renderCreate(){
-  $('eventTrack').innerHTML=tracks.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
-  if(!$('eventDate').value)$('eventDate').value=new Date().toISOString().slice(0,10);
+  const selectedTrack=$('eventTrack').value;
+  const options=tracks.map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  $('eventTrack').innerHTML=options;
+  $('eventEditTrack').innerHTML=options;
+  if(tracks.some(t=>t.id===selectedTrack))$('eventTrack').value=selectedTrack;
+  if(!$('eventDate').value)$('eventDate').value=new Date().toLocaleDateString('sv-SE');
+  if(!selected)$('eventCreateDetails').open=true;
+  $('eventMeetingSettings').hidden=!selected||!!selected.deleted_at||!['draft','registration'].includes(selected.status);
+  if(selected&&document.activeElement?.closest('#eventMeetingForm')===null){
+    $('eventEditName').value=selected.name;
+    $('eventEditDate').value=selected.date||'';
+    $('eventEditTrack').value=selected.track_id;
+    $('eventEditLocation').value=selected.location||'';
+    $('eventEditSeries').value=selected.series||'';
+    $('eventEditFormat').value=selected.format||'qualifying_main';
+    $('eventEditFormat').disabled=selected.stages.length>0;
+    $('eventEditBestLegs').value=selected.best_legs||1;
+    $('eventEditPoints').value=(selected.points_table||[]).join(',');
+  }
+}
+function renderNextStep(){
+  const box=$('eventNextStep');
+  let title,detail,button,paneName;
+  if(!selected){title='Mulai dari meeting';detail='Pilih track dan buat meeting. Kelas serta peserta bisa ditambahkan setelahnya.';button='Buat meeting';paneName='create';}
+  else if(selected.deleted_at){title='Penghapusan meeting tertunda';detail='Pilih versi aplikasi untuk mengirim penghapusan ke website, atau versi website untuk memulihkan meeting.';button='Lihat sinkronisasi';paneName='meeting';}
+  else if(selected.status==='completed'){title='Meeting selesai';detail='Hasil sesi dan klasemen sudah tersimpan.';button='Lihat hasil';paneName='results';}
+  else if(!selected.classes.length){title='Tambahkan competition';detail='Setiap kelas memiliki daftar peserta dan format ronde sendiri.';button='Tambah kelas';paneName='competition';}
+  else if(!selected.entries.length){title='Daftarkan peserta';detail='Pilih pembalap dan transponder untuk setiap kelas.';button='Buka peserta';paneName='drivers';}
+  else if(selected.stages.some(s=>s.status==='live')){title='Sesi sedang berjalan';detail='Pantau passing dan leaderboard di Timing.';button='Buka timing';paneName='timing';}
+  else if(!selected.entries.some(e=>e.approved)){title='Setujui peserta';detail='Periksa pendaftaran sebelum membuat ronde.';button='Buka peserta';paneName='drivers';}
+  else if(!selected.stages.length){title='Susun sesi';detail='Atur format kelas, lalu buat ronde atau sesi khusus.';button='Buka jadwal';paneName='schedule';}
+  else if(selected.status==='draft'){title='Buka pendaftaran';detail='Peserta dan sesi siap. Buka pendaftaran, lalu lakukan check-in.';button='Buka pendaftaran';paneName='registration';}
+  else if(!selected.entries.some(e=>e.approved&&e.checked_in)){title='Check-in peserta';detail='Tandai peserta yang hadir agar meeting dapat dimulai.';button='Buka peserta';paneName='drivers';}
+  else if(selected.status==='registration'){title='Mulai meeting';detail='Meeting siap dijalankan. Setelah dimulai, buka Timing untuk sesi pertama.';button='Mulai meeting';paneName='running';}
+  else if(selected.stages.every(s=>s.status==='saved')){title='Semua sesi selesai';detail='Periksa hasil, lalu tutup meeting saat klasemen sudah benar.';button='Lihat hasil';paneName='results';}
+  else{title='Jalankan sesi berikutnya';detail='Pilih sesi terjadwal di Timing, lalu mulai saat peserta siap.';button='Buka timing';paneName='timing';}
+  box.innerHTML=`<div><b>${esc(title)}</b><span>${esc(detail)}</span></div><button type="button" class="btn primary" data-event-next="${paneName}">${esc(button)}</button>`;
 }
 function renderEntries(){
   const classes=selected?.classes||[];
@@ -66,8 +104,24 @@ function renderEntries(){
   if(members.some(m=>m.id===currentMember))$('eventEntryMember').value=currentMember;
   renderCars();
   const entries=selected?.entries||[];
-  $('eventEntries').innerHTML=entries.length?entries.map(e=>`<div class="event-row"><div><b>${esc(e.nick||e.name)}</b><div class="event-muted">${esc(className(e.class_id))} · ${esc(e.transponder)} · ${esc(e.car_brand||'Mobil belum diisi')}</div><small class="event-status">${e.approved?(e.checked_in?'Hadir':'Disetujui · belum check-in'):'Menunggu persetujuan'}</small></div><div class="actions">${!members.some(m=>m.id===e.member_id)&&members.some(m=>(m.transponder||[]).some(tp=>String(tp)===String(e.transponder)))?`<button class="btn sm" data-entry-action="reconcile" data-id="${esc(e.id)}">Cocokkan akun</button>`:''}${!e.approved?`<button class="btn sm" data-entry-action="approve" data-id="${esc(e.id)}">Setujui</button>`:`<button class="btn sm" data-entry-action="${e.checked_in?'checkout':'checkin'}" data-id="${esc(e.id)}">${e.checked_in?'Batalkan hadir':'Check-in'}</button>`}${selected.status==='draft'||selected.status==='registration'?`<button class="btn sm danger" data-entry-action="remove" data-id="${esc(e.id)}">Hapus</button>`:''}</div></div>`).join(''):'<p class="note">Belum ada peserta. Tambahkan member atau tamu dan pilih mobilnya.</p>';
-  $('eventEntryForm').hidden=!selected||!['draft','registration'].includes(selected.status);
+  $('eventEntries').innerHTML=entries.length?entries.map(e=>{
+    const match=!members.some(m=>m.id===e.member_id)&&members.some(m=>
+      (m.transponder||[]).some(tp=>String(tp)===String(e.transponder)));
+    let actions='';
+    if(!selected.deleted_at&&selected.status!=='completed'){
+      if(match)actions+=`<button class="btn sm" data-entry-action="reconcile" data-id="${esc(e.id)}">Cocokkan akun</button>`;
+      actions+=e.approved
+        ? `<button class="btn sm" data-entry-action="${e.checked_in?'checkout':'checkin'}" data-id="${esc(e.id)}">${e.checked_in?'Batalkan hadir':'Check-in'}</button>`
+        : `<button class="btn sm" data-entry-action="approve" data-id="${esc(e.id)}">Setujui</button>`;
+      if(['draft','registration'].includes(selected.status))
+        actions+=`<button class="btn sm danger" data-entry-action="remove" data-id="${esc(e.id)}">Hapus</button>`;
+    }
+    return `<div class="event-row"><div><b>${esc(e.nick||e.name)}</b>
+      <div class="event-muted">${esc(className(e.class_id))} · ${esc(e.transponder)} · ${esc(e.car_brand||'Mobil belum diisi')}</div>
+      <small class="event-status">${e.approved?(e.checked_in?'Hadir':'Disetujui · belum check-in'):'Menunggu persetujuan'}</small></div>
+      <div class="actions">${actions}</div></div>`;
+  }).join(''):'<p class="note">Belum ada peserta. Tambahkan member atau tamu dan pilih mobilnya.</p>';
+  $('eventEntryForm').hidden=!selected||!!selected.deleted_at||!selected.classes.length||!['draft','registration'].includes(selected.status);
 }
 function renderCars(){
   const member=members.find(m=>m.id===$('eventEntryMember').value);
@@ -82,24 +136,29 @@ function competitionConfig(c){return Object.assign({practice:false,qualifier_rou
   qualifier_rank:'result',final_rank:'position',qualifier_target:300,final_target:300},c.config||{});}
 function renderCompetitions(){
   const classes=selected?.classes||[];
-  $('eventCompetitionAddForm').hidden=!selected||!['draft','registration'].includes(selected.status);
+  $('eventCompetitionAddForm').hidden=!selected||!!selected.deleted_at||!['draft','registration'].includes(selected.status);
+  if(!selected||selected.deleted_at||selected.status==='completed')$('eventCompetitionForm').hidden=true;
   $('eventCompetitionSummary').innerHTML=classes.length?classes.map(c=>{
     const count=selected.entries.filter(e=>e.class_id===c.id).length;
     const cfg=competitionConfig(c);
-    return `<div class="event-competition-summary"><strong>${esc(c.name)}</strong><span>${count} drivers · ${cfg.qualifier_rounds} qualifiers · ${cfg.final_rounds} finals</span></div>`;
-  }).join(''):'<p class="note">Buat meeting untuk menambahkan competition.</p>';
+    const first=selected.format==='heat_final'?'heat':'qualifier';
+    return `<div class="event-competition-summary"><strong>${esc(c.name)}</strong><span>${count} peserta · ${cfg.qualifier_rounds} ${first} · ${cfg.final_rounds} final</span></div>`;
+  }).join(''):'<p class="note">Belum ada kelas. Tambahkan kelas pertama di bawah.</p>';
+  if(selected?.deleted_at){$('eventCompetitionList').innerHTML='';return;}
   $('eventCompetitionList').innerHTML=classes.map(c=>{
     const cfg=competitionConfig(c),stages=selected.stages.filter(s=>s.class_id===c.id);
-    const q=stages.some(s=>s.kind==='qualifying'),f=stages.some(s=>s.kind==='final');
+    const firstKind=selected.format==='heat_final'?'heat':'qualifying';
+    const firstLabel=firstKind==='heat'?'heats':'qualifiers';
+    const q=stages.some(s=>s.kind===firstKind),f=stages.some(s=>s.kind==='final');
     const p=stages.some(s=>s.kind==='practice');
-    const qPending=stages.some(s=>s.kind==='qualifying'&&s.status!=='saved');
+    const qPending=stages.some(s=>s.kind===firstKind&&s.status!=='saved');
     const approved=selected.entries.filter(e=>e.class_id===c.id&&e.approved).length;
-    return `<article class="event-competition"><div><b>${esc(c.name)}</b><small>${approved} disetujui · Grup ${cfg.group_min}–${cfg.group_max} · ${cfg.qualifier_rounds} Q / ${cfg.final_rounds} F</small></div>
-      <div class="actions"><button class="btn sm" data-competition-edit="${esc(c.id)}" ${stages.length?'disabled':''}>Atur format</button>
+    return `<article class="event-competition"><div><b>${esc(c.name)}</b><small>${approved} disetujui · Grup ${cfg.group_min}–${cfg.group_max} · ${cfg.qualifier_rounds} ${firstKind==='heat'?'H':'Q'} / ${cfg.final_rounds} F</small></div>
+      <div class="actions"><button class="btn sm" data-competition-edit="${esc(c.id)}" ${stages.length||selected.status==='completed'?'disabled':''}>Atur format</button>
       ${cfg.practice?`<button class="btn sm" data-competition-practice="${esc(c.id)}" ${p||!approved||selected.status==='completed'?'disabled':''}>Buat practice</button>`:''}
-      <button class="btn sm" data-competition-generate="qualifying" data-class-id="${esc(c.id)}" ${q||!approved||!cfg.qualifier_rounds||selected.status==='completed'?'disabled':''}>Buat qualifiers</button>
+      <button class="btn sm" data-competition-generate="${firstKind}" data-class-id="${esc(c.id)}" ${q||!approved||!cfg.qualifier_rounds||selected.status==='completed'?'disabled':''}>Buat ${firstLabel}</button>
       <button class="btn sm" data-competition-generate="final" data-class-id="${esc(c.id)}" ${f||!approved||!cfg.final_rounds||qPending||selected.status==='completed'?'disabled':''}>Buat finals</button>
-      ${classes.length>1&&!stages.length&&!selected.entries.some(e=>e.class_id===c.id)&&['draft','registration'].includes(selected.status)?`<button class="btn sm danger" data-competition-remove="${esc(c.id)}">Hapus</button>`:''}</div></article>`;
+      ${!stages.some(s=>s.status!=='planned')&&['draft','registration'].includes(selected.status)&&!selected.deleted_at?`<button class="btn sm danger" data-competition-remove="${esc(c.id)}">Hapus</button>`:''}</div></article>`;
   }).join('')||'<p class="note">Belum ada competition.</p>';
 }
 function renderStages(){
@@ -110,8 +169,23 @@ function renderStages(){
   $('eventStagePreset').innerHTML='<option value="">Atur langsung di bawah</option>'+presets.map(p=>`<option value="${esc(p.id)}">${esc(p.name)} · ${p.target==='laps'?esc(p.value)+' lap':esc(p.value)+' detik'}</option>`).join('');
   renderStageEntries();
   const stages=selected?.stages||[];
-  $('eventStages').innerHTML=stages.length?stages.map(s=>`<div class="event-row"><div><b>${esc(s.sequence)}. ${esc(s.name)}</b><div class="event-muted">${esc(className(s.class_id))} · ${esc(s.group)} · ${esc(kindName(s.kind))} · ${s.entry_ids.length?s.entry_ids.length+' peserta':'semua peserta kelas'}</div><small class="event-status">${s.status==='saved'?'Hasil tersimpan':s.status==='live'?(race?.status==='idle'?'Timing terputus':'Sedang berjalan'):'Terjadwal'}</small></div><div class="actions">${s.status==='planned'?`<button class="btn sm" data-stage-action="prepare" data-id="${esc(s.id)}">Buka Timing</button><button class="btn sm" data-stage-action="move" data-direction="up" data-id="${esc(s.id)}" aria-label="Naikkan ${esc(s.name)}">↑</button><button class="btn sm" data-stage-action="move" data-direction="down" data-id="${esc(s.id)}" aria-label="Turunkan ${esc(s.name)}">↓</button><button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus</button>`:''}</div></div>`).join(''):'<p class="note">Belum ada sesi. Tambahkan kualifikasi, heat, main, atau final sesuai format event.</p>';
-  $('eventStageForm').hidden=!selected||selected.status==='completed';
+  $('eventStages').innerHTML=stages.length?stages.map(s=>{
+    let actions='';
+    if(!selected.deleted_at&&s.status==='planned'){
+      actions=`<button class="btn sm" data-stage-action="prepare" data-id="${esc(s.id)}">Buka Timing</button>
+        <button class="btn sm" data-stage-action="move" data-direction="up" data-id="${esc(s.id)}" aria-label="Naikkan ${esc(s.name)}">↑</button>
+        <button class="btn sm" data-stage-action="move" data-direction="down" data-id="${esc(s.id)}" aria-label="Turunkan ${esc(s.name)}">↓</button>
+        <button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus</button>`;
+    }else if(!selected.deleted_at&&s.status==='saved'&&!s.superseded_by&&selected.status!=='completed'){
+      actions=`<button class="btn sm" data-stage-action="repeat" data-id="${esc(s.id)}">Race ulang</button>
+        <button class="btn sm danger" data-stage-action="remove" data-id="${esc(s.id)}">Hapus dari meeting</button>`;
+    }
+    return `<div class="event-row"><div><b>${esc(s.sequence)}. ${esc(s.name)}</b>
+      <div class="event-muted">${esc(className(s.class_id))} · ${esc(s.group)} · ${esc(kindName(s.kind))} · ${s.entry_ids.length?s.entry_ids.length+' peserta':'semua peserta kelas'}</div>
+      <small class="event-status">${s.status==='saved'?'Hasil tersimpan':s.status==='live'?(race?.status==='idle'?'Timing terputus':'Sedang berjalan'):'Terjadwal'}</small></div>
+      <div class="actions">${actions}</div></div>`;
+  }).join(''):'<p class="note">Belum ada sesi. Tambahkan kualifikasi, heat, main, atau final sesuai format event.</p>';
+  $('eventStageDetails').hidden=!selected||!!selected.deleted_at||selected.status==='completed'||!classes.length;
 }
 function renderStageEntries(){
   const classId=$('eventStageClass').value;
@@ -144,38 +218,67 @@ function renderTiming(){
   const live=stages.find(stage=>stage.status==='live');
   const saved=stages.find(stage=>stage.status==='saved'&&race?.status==='done'&&race?.saved_id===stage.race_id);
   const next=stages.find(stage=>stage.id===timingStageId&&stage.status==='planned')||stages.find(stage=>stage.status==='planned');
-  const stage=live||saved||next;
-  if(!selected){$('eventTiming').innerHTML='<p class="note">Pilih Event untuk menjalankan sesi.</p>';return;}
-  if(!stage){$('eventTiming').innerHTML='<p class="note">Belum ada sesi siap. Susun sesi di Schedule.</p>';return;}
+  const stage=live||saved||(race?.status==='idle'?next:null);
+  if(!selected||selected.deleted_at){$('eventTiming').innerHTML='<p class="note">Pilih meeting aktif untuk menjalankan sesi.</p>';return;}
+  if(!stage){
+    $('eventTiming').innerHTML=race?.status!=='idle'
+      ? '<p class="note">Sesi timing sebelumnya masih aktif. Simpan atau buang hasilnya, lalu reset sebelum menjalankan sesi berikutnya.</p>'
+      : '<p class="note">Belum ada sesi siap. Susun sesi di Jadwal.</p>';
+    return;
+  }
   const entryIds=new Set(stage.entry_ids||[]);
   const entrants=selected.entries.filter(entry=>entry.class_id===stage.class_id&&(!entryIds.size||entryIds.has(entry.id)));
   const ready=entrants.filter(entry=>entry.approved&&entry.checked_in);
-  const action=stage.status==='planned'&&selected.status==='running'&&race?.status==='idle'
-    ? `<button class="btn primary" data-stage-action="start" data-id="${esc(stage.id)}" ${!ready.length?'disabled':''}>Mulai sesi</button>`
-    : stage.status==='live'&&race?.status!=='idle'
-      ? `<button class="btn fin" data-stage-action="save" data-id="${esc(stage.id)}">Selesai & simpan</button>`
-      : stage.status==='live'&&race?.status==='idle'
-        ? `<button class="btn" data-stage-action="retry" data-id="${esc(stage.id)}">Jalankan ulang</button>`
-        : saved ? `<button class="btn" data-stage-action="reset" data-id="${esc(stage.id)}">Siap sesi berikutnya</button>` : '';
+  let action='';
+  if(stage.status==='planned'&&selected.status==='running'&&race?.status==='idle'){
+    action=`<button class="btn primary" data-stage-action="start" data-id="${esc(stage.id)}" ${!ready.length?'disabled':''}>Mulai sesi</button>`;
+  }else if(stage.status==='live'&&race?.status==='idle'){
+    action=`<button class="btn" data-stage-action="retry" data-id="${esc(stage.id)}">Jalankan ulang</button>`;
+  }else if(stage.status==='live'){
+    action=(['live','paused','done'].includes(race?.status)?`<button class="btn fin" data-stage-action="save" data-id="${esc(stage.id)}">Selesai & simpan</button>`:'')+
+      `<button class="btn danger" data-stage-action="discard" data-id="${esc(stage.id)}">Batalkan & ulang</button>`;
+  }else if(saved){
+    action=`<button class="btn" data-stage-action="reset" data-id="${esc(stage.id)}">Siap sesi berikutnya</button>`;
+  }
   $('eventTiming').innerHTML=`<div class="event-row"><div><b>${esc(stage.name)}</b><div class="event-muted">${esc(className(stage.class_id))} · ${esc(stage.group)} · ${esc(kindName(stage.kind))} · ${ready.length}/${entrants.length} check-in</div></div><div class="actions">${action}</div></div>${stage.status==='planned'&&selected.status!=='running'?'<p class="note">Mulai Event di tab Meeting sebelum menjalankan sesi.</p>':''}${stage.status==='planned'&&!ready.length?'<p class="note">Setujui dan check-in peserta di tab Drivers sebelum memulai.</p>':''}`;
 }
 function kindName(kind){return {practice:'Practice',qualifying:'Qualifier',heat:'Heat',main:'Main',final:'Final'}[kind]||kind;}
 function render(){
   renderTabs();renderList();renderCreate();
   $('eventTitle').textContent=selected?.name||'Pilih event';
-  $('eventState').textContent=selected?.status||'';
-  $('eventMeta').textContent=selected?`${selected.date||'—'} · ${selected.track_name} · ${selected.classes.length} kelas · ${selected.entries.length} peserta`:'';
+  $('eventState').textContent=selected?.deleted_at?'Dihapus':selected?.status||'';
+  $('eventMeta').textContent=selected?`${selected.date||'—'} · ${selected.track_name}${selected.location?' · '+selected.location:''}${selected.series?' · '+selected.series:''} · ${selected.classes.length} kelas · ${selected.entries.length} peserta`:'';
   $('eventSync').innerHTML=!selected?'':sync?.conflict?'<p style="color:var(--bad)">Event berubah di aplikasi dan website. Pilih versi yang dipertahankan.</p><div class="actions"><button class="btn sm" data-event-resolve="remote">Pakai versi website</button><button class="btn sm danger" data-event-resolve="local">Kirim versi aplikasi</button></div>':sync?.pending?'Perubahan menunggu sinkronisasi':'Tersinkron';
   const actions=$('eventActions');
-  actions.innerHTML=!selected?'':selected.status==='draft'?'<button class="btn primary" data-event-status="registration">Buka pendaftaran</button>':selected.status==='registration'?'<button class="btn primary" data-event-status="running">Mulai event</button>':selected.status==='running'?'<button class="btn" data-event-status="completed">Tutup event</button>':'';
-  renderEntries();renderCompetitions();renderStages();renderResults();renderTiming();renderLive();
+  actions.innerHTML=!selected||selected.deleted_at?'':(selected.status==='draft'?'<button class="btn primary" data-event-status="registration">Buka pendaftaran</button>':selected.status==='registration'?'<button class="btn primary" data-event-status="running">Mulai event</button>':selected.status==='running'?'<button class="btn" data-event-status="completed">Tutup event</button>':'')+
+    '<button class="btn danger" type="button" data-event-delete>Hapus meeting</button>';
+  renderNextStep();renderEntries();renderCompetitions();renderStages();renderResults();renderTiming();renderLive();
 }
-async function mutate(path,body){try{await api(path,body);await load(selected?.id);}catch(error){fail(error);}}
+async function mutate(path,body){try{await api(path,body);$('eventError').hidden=true;await load(selected?.id);}catch(error){fail(error);}}
 
 document.querySelectorAll('[data-event-pane-tab]').forEach(button=>button.onclick=()=>{pane=button.dataset.eventPaneTab;renderTabs();});
 document.addEventListener('click',async event=>{
+  const next=event.target.closest('[data-event-next]');
+  if(next){
+    const step=next.dataset.eventNext;
+    if(step==='create'){$('eventCreateDetails').open=true;$('eventName').focus();}
+    else if(step==='competition'){$('eventCompetitionNewName').focus();}
+    else if(step==='registration'||step==='running')await mutate('/api/event/status',{event_id:selected.id,status:step});
+    else{pane=step;renderTabs();}
+    return;
+  }
   const select=event.target.closest('[data-event-select]');
-  if(select){try{timingStageId=null;await load(select.dataset.eventSelect);pane='meeting';renderTabs();}catch(error){fail(error);}return;}
+  if(select){try{timingStageId=null;await load(select.dataset.eventSelect);pane='meeting';$('eventCreateDetails').open=false;renderTabs();}catch(error){fail(error);}return;}
+  const deleteMeeting=event.target.closest('[data-event-delete]');
+  if(deleteMeeting&&selected){
+    if(!window.confirm('Hapus meeting ini beserta kelas dan jadwalnya? Hasil race yang sudah disimpan tetap ada di History Race.'))return;
+    try{
+      await api('/api/event/meeting/delete',{event_id:selected.id});
+      selected=null;timingStageId=null;$('eventError').hidden=true;
+      await load();pane='meeting';renderTabs();
+    }catch(error){fail(error);}
+    return;
+  }
   const edit=event.target.closest('[data-competition-edit]');
   if(edit&&selected){
     const c=selected.classes.find(x=>x.id===edit.dataset.competitionEdit),cfg=competitionConfig(c);
@@ -193,15 +296,18 @@ document.addEventListener('click',async event=>{
   if(generate&&selected){
     const c=selected.classes.find(x=>x.id===generate.dataset.classId),cfg=competitionConfig(c);
     const final=generate.dataset.competitionGenerate==='final';
+    const firstKind=selected.format==='heat_final'?'heat':'qualifying';
+    const kind=final?'final':firstKind;
+    const name=final?'Final':firstKind==='heat'?'Heat':'Qualifier';
     const rounds=final?cfg.final_rounds:cfg.qualifier_rounds;
     const start=final?cfg.final_start:cfg.qualifier_start;
     const rank=final?cfg.final_rank:cfg.qualifier_rank;
     const value=final?cfg.final_target:cfg.qualifier_target;
     await mutate('/api/event/stage/generate',{event_id:selected.id,class_id:c.id,
-      kind:final?'final':'qualifying',name:final?'Final':'Qualifier',rounds,group_max:cfg.group_max,
-      seed_basis:final&&selected.stages.some(s=>s.kind==='qualifying'&&s.status==='saved')?'best':'registration',
+      kind,name,rounds,group_max:cfg.group_max,
+      seed_basis:final&&selected.stages.some(s=>s.kind===firstKind&&s.status==='saved')?'best':'registration',
       group_mode:final?'top':cfg.initial_stacking==='front'?'top':'balanced',
-      cfg:{name:final?'Final':'Qualifier',target:'time',value,target_time_ms:value*1000,
+      cfg:{name,target:'time',value,target_time_ms:value*1000,
         rank,start_mode:start,cd:5,random_delay_max:2,countdown_step_ms:1500,
         finish_current_lap:true}});return;
   }
@@ -215,7 +321,9 @@ document.addEventListener('click',async event=>{
         countdown_step_ms:1500,finish_current_lap:true}});return;
   }
   const removeCompetition=event.target.closest('[data-competition-remove]');
-  if(removeCompetition&&selected){await mutate('/api/event/competition/remove',
+  if(removeCompetition&&selected){
+    if(!window.confirm('Hapus kelas ini beserta peserta dan sesi terjadwalnya?'))return;
+    await mutate('/api/event/competition/remove',
     {event_id:selected.id,class_id:removeCompetition.dataset.competitionRemove});return;}
   const status=event.target.closest('[data-event-status]');
   if(status&&selected){await mutate('/api/event/status',{event_id:selected.id,status:status.dataset.eventStatus});return;}
@@ -239,6 +347,17 @@ document.addEventListener('click',async event=>{
       timingStageId=stage.dataset.id;pane='timing';renderTiming();renderTabs();return;
     }
     if(stage.dataset.stageAction==='save'&&!window.confirm('Akhiri sesi timing dan simpan hasilnya?'))return;
+    if(stage.dataset.stageAction==='discard'&&!window.confirm('Buang seluruh passing sesi ini dan kembalikan ke jadwal untuk race ulang?'))return;
+    if(stage.dataset.stageAction==='remove'&&!window.confirm('Hapus sesi dari meeting? Hasil race yang sudah disimpan tetap ada di History Race.'))return;
+    if(stage.dataset.stageAction==='repeat'){
+      try{
+        const response=await api('/api/event/stage/repeat',{event_id:selected.id,stage_id:stage.dataset.id});
+        timingStageId=response.stage.id;pane='schedule';$('eventError').hidden=true;
+        await load(selected.id);renderTabs();
+      }catch(error){fail(error);}
+      return;
+    }
+    if(stage.dataset.stageAction==='discard'){timingStageId=stage.dataset.id;pane='timing';}
     await mutate('/api/event/stage/'+stage.dataset.stageAction,{event_id:selected.id,stage_id:stage.dataset.id,
       direction:stage.dataset.direction});
   }
@@ -300,10 +419,22 @@ $('eventCreateForm').onsubmit=async event=>{
   event.preventDefault();
   try{
     const response=await api('/api/event/create',{name:$('eventName').value,date:$('eventDate').value,
-      track_id:$('eventTrack').value,format:$('eventFormat').value,best_legs:Number($('eventBestLegs').value),
-      points_table:$('eventPoints').value,
-      classes:$('eventClasses').value.split(',').map(x=>x.trim()).filter(Boolean)});
+      track_id:$('eventTrack').value,location:$('eventLocation').value,series:$('eventSeries').value});
+    $('eventCreateDetails').open=false;
+    $('eventError').hidden=true;
     await load(response.event.id);pane='meeting';renderTabs();$('eventCreateForm').reset();
+  }catch(error){fail(error);}
+};
+$('eventMeetingForm').onsubmit=async event=>{
+  event.preventDefault();if(!selected)return;
+  try{
+    await api('/api/event/meeting/update',{event_id:selected.id,name:$('eventEditName').value,
+      date:$('eventEditDate').value,track_id:$('eventEditTrack').value,
+      location:$('eventEditLocation').value,series:$('eventEditSeries').value,
+      format:$('eventEditFormat').value,best_legs:Number($('eventEditBestLegs').value),
+      points_table:$('eventEditPoints').value});
+    $('eventError').hidden=true;$('eventMeetingSettings').open=false;
+    await load(selected.id);
   }catch(error){fail(error);}
 };
 $('eventEntryForm').onsubmit=async event=>{

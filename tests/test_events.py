@@ -2,13 +2,19 @@ import tempfile
 import unittest
 import uuid
 import copy
+import json
+import threading
+from http.server import ThreadingHTTPServer
 from pathlib import Path
+from types import SimpleNamespace
+from urllib.request import Request, urlopen
 
 from app.club import ClubStore
 from app.events import EventStore
 from app.event_sync import sync_events
 from app.race import RaceEngine
 from app.cloud import CloudService
+from app.webapp import make_handler
 
 
 class EventTests(unittest.TestCase):
@@ -96,6 +102,108 @@ class EventTests(unittest.TestCase):
         self.store.remove_competition(event_id, new_id)
         self.assertEqual(len(self.store.get(event_id)["classes"]), 2)
 
+    def test_meeting_shell_settings_and_competition_cascade(self):
+        meeting = self.store.create({"name": "Series 2", "date": "2026-11-15",
+                                     "track_id": self.track["id"], "location": "Binjai"})
+        self.assertEqual(meeting["classes"], [])
+        self.assertEqual(meeting["location"], "Binjai")
+        with self.assertRaisesRegex(ValueError, "competition"):
+            self.store.set_status(meeting["id"], "registration")
+        updated = self.store.update_meeting(meeting["id"], {
+            "name": "Series 2 Final", "track_id": self.track["id"],
+            "date": "2026-11-16", "series": "Round 2",
+            "format": "heat_final", "best_legs": 2, "points_table": "20,15,10"})
+        self.assertEqual(updated["format"], "heat_final")
+        self.assertEqual(updated["points_table"], [20, 15, 10])
+        competition = self.store.add_competition(meeting["id"], "Buggy")["classes"][0]
+        entry = self.store.add_entry(meeting["id"], {"class_id": competition["id"],
+            "member_id": self.alice["id"], "transponder": 101})
+        self.store.add_stage(meeting["id"], {"class_id": competition["id"],
+            "kind": "heat", "name": "Heat 1", "cfg": {}})
+        other_track = self.club.save_track({"name": "Track B"})
+        self.assertEqual(self.store.update_meeting(meeting["id"],
+                         {"track_id": other_track["id"]})["track_id"], other_track["id"])
+        with self.assertRaisesRegex(ValueError, "Hapus sesi"):
+            self.store.update_meeting(meeting["id"], {"format": "qualifying_main"})
+        removed = self.store.remove_competition(meeting["id"], competition["id"])
+        self.assertEqual(removed["classes"], [])
+        self.assertEqual(removed["entries"], [])
+        self.assertEqual(removed["stages"], [])
+        self.assertEqual(entry["name"], "Alice")
+
+    def test_repeat_keeps_previous_result_and_delete_uses_tombstone(self):
+        event_id = self.event["id"]
+        entry = self.store.add_entry(event_id, {"class_id": self.class_id,
+            "member_id": self.alice["id"], "transponder": 101})
+        self.store.set_entry(event_id, entry["id"], approved=True, checked_in=True)
+        stage = self.store.add_stage(event_id, {"class_id": self.class_id,
+            "kind": "final", "name": "Final A", "entry_ids": [entry["id"]], "cfg": {}})
+        self.store.set_status(event_id, "registration")
+        self.store.set_status(event_id, "running")
+        self.store.mark_stage(event_id, stage["id"], "live")
+        with self.assertRaisesRegex(ValueError, "Selesaikan sesi"):
+            self.store.delete_meeting(event_id)
+        self.club.simpan_race({"id": "old-result", "name": "Final A", "started_at": 1,
+            "drivers": [{"name": "Alice", "transponder": 101, "pos": 1,
+                         "result_status": "FIN", "laps": [12000]}]})
+        self.store.mark_stage(event_id, stage["id"], "saved", "old-result")
+        repeated = self.store.repeat_stage(event_id, stage["id"])
+        self.assertEqual(repeated["entry_ids"], [entry["id"]])
+        self.assertEqual(repeated["status"], "planned")
+        self.assertNotEqual(repeated["id"], stage["id"])
+        self.assertEqual(self.store.stage(event_id, stage["id"])[1]["race_id"], "old-result")
+        self.club.simpan_race({"id": "new-result", "name": "Final A Ulang", "started_at": 2,
+            "drivers": [{"name": "Alice", "transponder": 101, "pos": 2,
+                         "result_status": "FIN", "laps": [11000]}]})
+        self.store.mark_stage(event_id, repeated["id"], "live")
+        self.store.mark_stage(event_id, repeated["id"], "saved", "new-result")
+        self.assertEqual(self.store.stage(event_id, stage["id"])[1]["superseded_by"], repeated["id"])
+        self.assertEqual(self.store.standings(event_id)[0]["drivers"][0]["points"], 18)
+        self.assertEqual(len([result for result in self.store.results(event_id)
+                              if result["status"] == "saved"]), 2)
+        with self.assertRaisesRegex(ValueError, "digantikan"):
+            self.store.repeat_stage(event_id, stage["id"])
+        again = self.store.repeat_stage(event_id, repeated["id"])
+        self.assertEqual(again["name"], "Final A · Ulang 2")
+        self.store.remove_stage(event_id, again["id"])
+        with self.assertRaisesRegex(ValueError, "ulangannya"):
+            self.store.remove_stage(event_id, stage["id"])
+        self.store.remove_stage(event_id, repeated["id"])
+        self.assertNotIn("superseded_by", self.store.stage(event_id, stage["id"])[1])
+        self.assertEqual(self.store.standings(event_id)[0]["drivers"][0]["points"], 25)
+        deleted = self.store.delete_meeting(event_id)
+        self.assertTrue(deleted["deleted_at"])
+        self.assertFalse(any(item["id"] == event_id for item in self.store.list()))
+        with self.assertRaisesRegex(ValueError, "dihapus"):
+            self.store.get(event_id)
+        self.assertTrue(self.store.sync_state(event_id)["pending"])
+
+    def test_meeting_api_create_update_delete(self):
+        context = SimpleNamespace(cfg=SimpleNamespace(access_token=""), engine=None,
+                                  club=self.club)
+        server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(context))
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+
+        def post(path, data):
+            request = Request(f"http://127.0.0.1:{server.server_port}{path}",
+                              data=json.dumps(data).encode(),
+                              headers={"Content-Type": "application/json"})
+            with urlopen(request, timeout=5) as response:
+                return json.load(response)
+
+        created = post("/api/event/create", {"name": "API Meeting",
+                       "track_id": self.track["id"]})["event"]
+        self.assertEqual(created["classes"], [])
+        updated = post("/api/event/meeting/update", {"event_id": created["id"],
+                       "name": "API Meeting 2", "location": "Binjai"})["event"]
+        self.assertEqual(updated["location"], "Binjai")
+        deleted = post("/api/event/meeting/delete", {"event_id": created["id"]})["event"]
+        self.assertTrue(deleted["deleted_at"])
+
     def test_approval_checkin_and_stage_entry_validation(self):
         alice = self.store.add_entry(self.event["id"], {"class_id": self.class_id,
             "member_id": self.alice["id"], "transponder": 101})
@@ -113,6 +221,8 @@ class EventTests(unittest.TestCase):
         self.assertEqual(stage["status"], "planned")
         self.store.remove_stage(self.event["id"], stage["id"])
         self.assertEqual(self.store.get(self.event["id"])["stages"], [])
+        self.store.add_stage(self.event["id"], {"class_id": self.class_id,
+            "kind": "final", "name": "Final B", "group": "A", "entry_ids": [alice["id"]]})
         self.assertEqual(self.store.set_status(self.event["id"], "running")["status"], "running")
 
     def test_standings_use_best_legs_and_ignore_qualifying(self):

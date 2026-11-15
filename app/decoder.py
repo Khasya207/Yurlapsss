@@ -139,7 +139,7 @@ class DecoderClient(threading.Thread):
                 if len(parts) < 7:
                     self.rx_counts["bad"] += 1
                     return
-                if parts[2] != "OPN":
+                if parts[2] not in ("OPN", "AMB"):
                     return
                 self.rx_counts["P"] += 1
                 p = Passing(
@@ -239,7 +239,7 @@ def _f(parts: list[str], idx: int) -> Optional[float]:
 def parse_passing(msg: str) -> Optional[Passing]:
     """Helper untuk tes/utilitas."""
     parts = msg.split()
-    if len(parts) < 4 or parts[0] != "P" or parts[2] != "OPN":
+    if len(parts) < 4 or parts[0] != "P" or parts[2] not in ("OPN", "AMB"):
         return None
     try:
         timestamp = int(parts[1])

@@ -47,7 +47,7 @@ class DecoderSelectionTest(unittest.TestCase):
                 self.assertFalse(manager._start_process(exe))
                 launch.assert_not_called()
 
-    def test_saved_old_decoder_path_falls_back_to_bundled_opn_build(self):
+    def test_saved_old_decoder_path_falls_back_to_bundled_decoder(self):
         with tempfile.TemporaryDirectory() as folder, \
              patch('app.decoder_manager.default_data_dir', return_value=Path(folder)), \
              patch('app.decoder_manager.app_root', return_value=Path(folder)):
@@ -71,16 +71,17 @@ class DecoderSelectionTest(unittest.TestCase):
                 manager.run()
             launch.assert_called_once()
 
-    def test_only_opn_reaches_engine_even_with_old_decoder(self):
+    def test_only_opn_and_amb_reach_engine_even_with_old_decoder(self):
         class Engine:
             def __init__(self): self.seen = []
             def log(self, *_args): pass
-            def on_passing(self, passing): self.seen.append(passing.transponder_id)
+            def on_passing(self, passing): self.seen.append(
+                (passing.transponder_type, passing.transponder_id))
             def on_timesync(self, _parts): self.seen.append('timesync')
 
         engine = Engine()
         client = DecoderClient(engine, 'inproc://test')
-        for typ in ('AMB', 'RC3', 'RC4', 'RC4Hybrid', 'Vostok'):
+        for typ in ('RC3', 'RC4', 'RC4Hybrid', 'Vostok'):
             client.process_message(f'P 100 {typ} 44 -30 2 90000')
             client.process_message(f'T 100 {typ} 44 123')
             self.assertIsNone(parse_passing(f'P 100 {typ} 44 -30 2 90000'))
@@ -89,7 +90,9 @@ class DecoderSelectionTest(unittest.TestCase):
         self.assertEqual(engine.seen, [])
         self.assertEqual(client.rx_counts['bad'], 0)
         client.process_message('P 102 OPN 45 -30 2 90000')
-        self.assertEqual(engine.seen, [45])
+        client.process_message('P 103 AMB 46 -30 2 90000')
+        self.assertEqual(engine.seen, [('OPN', 45), ('AMB', 46)])
+        self.assertEqual(parse_passing('P 103 AMB 46 -30 2 90000').transponder_type, 'AMB')
 
     def test_passing_jitter_is_reordered_by_decoder_timestamp(self):
         class Engine:
@@ -105,6 +108,21 @@ class DecoderSelectionTest(unittest.TestCase):
         self.assertEqual(engine.seen, [])
         client._flush_pending(force=True)
         self.assertEqual(engine.seen, [(22, 100), (11, 120)])
+
+    def test_opn_and_amb_share_one_timestamp_order(self):
+        class Engine:
+            def __init__(self): self.seen = []
+            def log(self, *_args): pass
+            def on_passing(self, passing): self.seen.append(
+                (passing.transponder_type, passing.transponder_id))
+
+        engine = Engine()
+        client = DecoderClient(engine, "inproc://test", reorder_ms=40)
+        client._reorder_enabled = True
+        client._dispatch_message("P 120 OPN 11 -30 2 90000")
+        client._dispatch_message("P 100 AMB 22 -30 2 90000")
+        client._flush_pending(force=True)
+        self.assertEqual(engine.seen, [("AMB", 22), ("OPN", 11)])
 
     def test_three_passings_wait_for_quiet_window(self):
         class Engine:

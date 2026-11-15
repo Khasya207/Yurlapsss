@@ -74,7 +74,7 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # 2. Decoder YurLaps: dibangun dari sumber OpenStint (GPL-3.0), patch
-  #    OPN saja. Hasilnya dipakai job "build" di bawah, jadi satu repo
+  #    OPN + AMB RC3 lama. Hasilnya dipakai job "build" di bawah, jadi satu repo
   #    menghasilkan aplikasi + decoder sekaligus.
   # ---------------------------------------------------------------------------
   decoder:
@@ -124,15 +124,16 @@ jobs:
           cd upstream
           git rev-parse HEAD | tee ../upstream-commit.txt
 
-          # Jangan membangun decoder dengan dukungan RC jika patch tidak cocok.
+          # Patch hanya menyisakan OPN dan AMB RC3 lama; RC4 tetap mati.
           git apply --check ../decoder/patch/rename-target.patch
           git apply ../decoder/patch/rename-target.patch
           grep -q 'openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp' src/CMakeLists.txt
           ! grep -q 'rc4.cpp' src/CMakeLists.txt
-          ! grep -q 'match_preamble(p_rc3)' src/frame.cpp
+          grep -q 'match_preamble(p_rc3)' src/frame.cpp
           ! grep -q 'match_preamble(p_rc4)' src/frame.cpp
-          ! grep -q 'rc4_trainer\|rc4_registry\|decode_rc3' src/commons.cpp
-          echo "OK: YurLapsDecoder hanya mendeteksi OPN"
+          grep -q 'decode_rc3' src/commons.cpp
+          ! grep -q 'rc4_trainer\|rc4_registry\|decode_vostok' src/commons.cpp
+          echo "OK: YurLapsDecoder mendeteksi OPN dan AMB RC3 lama"
 
       - name: Build liquid-dsp
         shell: msys2 {0}
@@ -218,8 +219,8 @@ jobs:
           # Test exactly the packaged DLLs, without MSYS2 satisfying omissions.
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
           $protocol = (& .\YurLapsDecoder.exe --protocol-check 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0 -or $protocol -notmatch 'YURLAPS_OPN_ONLY=1') {
-            throw "Decoder paket bukan build OPN saja: $protocol"
+          if ($LASTEXITCODE -ne 0 -or $protocol -notmatch 'YURLAPS_OPN_AMB_RC3=1') {
+            throw "Decoder paket bukan build OPN dan AMB RC3: $protocol"
           }
           $output = (& .\YurLapsDecoder.exe --salah 2>&1 | Out-String)
           if ($output -notmatch 'Usage') {

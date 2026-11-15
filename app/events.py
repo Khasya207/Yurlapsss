@@ -23,6 +23,13 @@ def _label(value, name, limit=100):
     return value
 
 
+def _optional_label(value, name, limit):
+    value = str(value or "").strip()
+    if len(value) > limit:
+        raise ValueError(f"{name} maksimal {limit} karakter")
+    return value
+
+
 def _points(raw):
     if raw in (None, ""):
         return [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
@@ -62,19 +69,26 @@ class EventStore:
         self.club._conn.commit()
         return event
 
-    def list(self):
+    def list(self, *, include_delete_conflicts=False):
         with self.club.lock:
             club_id = self.club.club().get("club_id")
             rows = self.club._conn.execute(
-                "SELECT document_json FROM event_meet WHERE club_id IS ? "
+                "SELECT document_json,sync_error FROM event_meet WHERE club_id IS ? "
                 "ORDER BY updated_at DESC", (club_id,)).fetchall()
-            return [json.loads(row[0]) for row in rows]
+            output = []
+            for row in rows:
+                document = json.loads(row["document_json"])
+                if not document.get("deleted_at") or (include_delete_conflicts and row["sync_error"]):
+                    output.append(document)
+            return output
 
-    def get(self, event_id):
+    def get(self, event_id, *, include_deleted=False):
         with self.club.lock:
             event = self._load(event_id)
             if event.get("club_id") != self.club.club().get("club_id"):
                 raise ValueError("Event milik club lain")
+            if event.get("deleted_at") and not include_deleted:
+                raise ValueError("Meeting sudah dihapus")
             return event
 
     def sync_state(self, event_id):
@@ -84,12 +98,12 @@ class EventStore:
                 (event_id,)).fetchone()
             if not row:
                 raise ValueError("Event tidak ditemukan")
-            return {"pending": self.get(event_id).get("revision", 0) > row["synced_revision"],
+            return {"pending": self.get(event_id, include_deleted=True).get("revision", 0) > row["synced_revision"],
                     "conflict": bool(row["sync_error"]), "remote_revision": row["remote_revision"]}
 
     def resolve_sync_conflict(self, event_id, choice):
         with self.club.lock:
-            event = self.get(event_id)
+            event = self.get(event_id, include_deleted=True)
             row = self.club._conn.execute(
                 "SELECT sync_error FROM event_meet WHERE id=?", (event_id,)).fetchone()
             if not row or not row["sync_error"]:
@@ -111,7 +125,7 @@ class EventStore:
             else:
                 raise ValueError("Pilih versi website atau versi aplikasi")
             self.club._conn.commit()
-            return self.get(event_id)
+            return self.get(event_id, include_deleted=True)
 
     def create(self, data):
         with self.club.lock:
@@ -120,8 +134,8 @@ class EventStore:
             if not track:
                 raise ValueError("Pilih track yang tersedia")
             classes = data.get("classes") or []
-            if not isinstance(classes, list) or not classes:
-                raise ValueError("Tambahkan minimal satu kelas")
+            if not isinstance(classes, list):
+                raise ValueError("Daftar competition tidak valid")
             names = [_label(item, "Nama kelas", 60) for item in classes]
             if len(set(x.casefold() for x in names)) != len(names):
                 raise ValueError("Nama kelas tidak boleh sama")
@@ -129,6 +143,8 @@ class EventStore:
                 "id": _id(), "club_id": self.club.club().get("club_id"),
                 "name": _label(data.get("name"), "Nama event"),
                 "date": str(data.get("date") or ""), "track_id": track_id,
+                "location": _optional_label(data.get("location"), "Lokasi", 100),
+                "series": _optional_label(data.get("series"), "Seri", 60),
                 "track_name": track["name"], "status": "draft",
                 "format": data.get("format") if data.get("format") in ("qualifying_main", "heat_final") else "qualifying_main",
                 "best_legs": max(1, min(10, int(data.get("best_legs") or 1))),
@@ -136,6 +152,46 @@ class EventStore:
                 "classes": [{"id": _id(), "name": name} for name in names],
                 "entries": [], "stages": [], "created_at": time.time(), "revision": 0,
             }
+            return self._save(event)
+
+    def delete_meeting(self, event_id):
+        with self.club.lock:
+            event = self.get(event_id)
+            if any(stage["status"] == "live" for stage in event["stages"]):
+                raise ValueError("Selesaikan sesi timing sebelum menghapus meeting")
+            event["deleted_at"] = time.time()
+            return self._save(event)
+
+    def update_meeting(self, event_id, data):
+        with self.club.lock:
+            event = self.get(event_id)
+            if event["status"] not in ("draft", "registration"):
+                raise ValueError("Pengaturan meeting terkunci setelah event dimulai")
+            track_id = str(data.get("track_id") or event["track_id"])
+            track = self.club.track(track_id)
+            if not track:
+                raise ValueError("Pilih track yang tersedia")
+            format_value = data.get("format", event.get("format", "qualifying_main"))
+            if format_value not in ("qualifying_main", "heat_final"):
+                raise ValueError("Format meeting tidak dikenal")
+            if event["stages"] and format_value != event.get("format", "qualifying_main"):
+                raise ValueError("Hapus sesi terjadwal sebelum mengganti format")
+            try:
+                best_legs = int(data.get("best_legs", event.get("best_legs", 1)))
+            except (TypeError, ValueError):
+                raise ValueError("Jumlah leg terbaik harus 1–10")
+            if not 1 <= best_legs <= 10:
+                raise ValueError("Jumlah leg terbaik harus 1–10")
+            location = str(data.get("location", event.get("location", ""))).strip()
+            series = str(data.get("series", event.get("series", ""))).strip()
+            if len(location) > 100 or len(series) > 60:
+                raise ValueError("Lokasi atau seri terlalu panjang")
+            event.update(name=_label(data.get("name", event["name"]), "Nama meeting"),
+                         date=str(data.get("date", event.get("date", ""))),
+                         location=location, series=series, track_id=track_id,
+                         track_name=track["name"], format=format_value,
+                         best_legs=best_legs,
+                         points_table=_points(data.get("points_table", event["points_table"])))
             return self._save(event)
 
     def configure_competition(self, event_id, class_id, data):
@@ -210,14 +266,17 @@ class EventStore:
             event = self.get(event_id)
             if event["status"] not in ("draft", "registration"):
                 raise ValueError("Competition tidak dapat dihapus setelah meeting berjalan")
-            if len(event["classes"]) <= 1:
-                raise ValueError("Meeting perlu minimal satu competition")
-            if any(item["class_id"] == class_id for item in event["entries"] + event["stages"]):
-                raise ValueError("Hapus peserta dan sesi competition ini terlebih dahulu")
+            if any(stage["class_id"] == class_id and stage["status"] != "planned"
+                   for stage in event["stages"]):
+                raise ValueError("Competition memiliki hasil atau sesi berjalan; hapus meeting jika seluruh event dibatalkan")
             before = len(event["classes"])
             event["classes"] = [item for item in event["classes"] if item["id"] != class_id]
             if len(event["classes"]) == before:
                 raise ValueError("Competition tidak ditemukan")
+            event["entries"] = [item for item in event["entries"] if item["class_id"] != class_id]
+            event["stages"] = [item for item in event["stages"] if item["class_id"] != class_id]
+            for number, stage in enumerate(event["stages"], 1):
+                stage["sequence"] = number
             return self._save(event)
 
     def set_status(self, event_id, status):
@@ -231,10 +290,14 @@ class EventStore:
             }
             if status not in transitions[event["status"]]:
                 raise ValueError("Perubahan status event tidak diizinkan")
+            if status == "registration" and not event["classes"]:
+                raise ValueError("Tambahkan minimal satu competition sebelum membuka pendaftaran")
             if status == "running" and not any(e["approved"] and e["checked_in"] for e in event["entries"]):
                 raise ValueError("Setujui dan check-in minimal satu peserta")
-            if status == "completed" and any(s["status"] == "live" for s in event["stages"]):
-                raise ValueError("Selesaikan sesi yang sedang berjalan")
+            if status == "running" and not event["stages"]:
+                raise ValueError("Buat minimal satu sesi sebelum memulai meeting")
+            if status == "completed" and any(s["status"] != "saved" for s in event["stages"]):
+                raise ValueError("Jalankan atau hapus semua sesi terjadwal sebelum menutup meeting")
             if status == "completed" and not any(s["status"] == "saved" for s in event["stages"]):
                 raise ValueError("Simpan minimal satu hasil sesi sebelum menutup event")
             event["status"] = status
@@ -361,12 +424,46 @@ class EventStore:
     def remove_stage(self, event_id, stage_id):
         with self.club.lock:
             event, stage = self.stage(event_id, stage_id)
-            if event["status"] == "completed" or stage["status"] != "planned":
-                raise ValueError("Hanya sesi terjadwal yang bisa dihapus")
+            if event["status"] == "completed" or stage["status"] == "live":
+                raise ValueError("Sesi berjalan atau meeting selesai tidak dapat dihapus")
+            if any(item.get("repeat_of") == stage_id for item in event["stages"]):
+                raise ValueError("Hapus sesi ulangannya terlebih dahulu")
             event["stages"] = [s for s in event["stages"] if s["id"] != stage_id]
             for index, item in enumerate(event["stages"], 1):
                 item["sequence"] = index
-            return self._save(event)
+                if item.get("superseded_by") == stage_id:
+                    item.pop("superseded_by", None)
+            self._save(event)
+            if stage["status"] == "saved":
+                event["published_standings"] = self.standings(event_id)
+                self._save(event)
+            return event
+
+    def repeat_stage(self, event_id, stage_id):
+        with self.club.lock:
+            event, original = self.stage(event_id, stage_id)
+            if event["status"] == "completed":
+                raise ValueError("Meeting sudah selesai")
+            if original["status"] != "saved":
+                raise ValueError("Hanya sesi dengan hasil tersimpan yang dapat diulang")
+            if original.get("superseded_by"):
+                raise ValueError("Sesi ini sudah digantikan; ulangi hasil terbaru")
+            if self.live_stage():
+                raise ValueError("Selesaikan sesi yang sedang berjalan dahulu")
+            root_id = original.get("repeat_root") or stage_id
+            root = next((item for item in event["stages"] if item["id"] == root_id), original)
+            count = sum(1 for stage in event["stages"]
+                        if stage.get("repeat_root") == root_id) + 1
+            repeated = {key: original[key] for key in
+                        ("class_id", "kind", "group")}
+            repeated.update(id=_id(), name=f"{root['name']} · Ulang {count}",
+                            cfg=dict(original["cfg"]), entry_ids=list(original["entry_ids"]),
+                            status="planned", race_id=None, repeat_of=stage_id,
+                            repeat_root=root_id,
+                            sequence=len(event["stages"]) + 1)
+            event["stages"].append(repeated)
+            self._save(event)
+            return repeated
 
     def move_stage(self, event_id, stage_id, direction):
         with self.club.lock:
@@ -471,6 +568,11 @@ class EventStore:
                 if not self.club.race(race_id):
                     raise ValueError("Hasil race tidak ditemukan")
                 stage["race_id"] = race_id
+            if status == "saved" and stage.get("repeat_of"):
+                original = next((item for item in event["stages"]
+                                 if item["id"] == stage["repeat_of"]), None)
+                if original and original["status"] == "saved":
+                    original["superseded_by"] = stage_id
             self._save(event)
             if status == "saved":
                 event["published_standings"] = self.standings(event_id)
@@ -507,6 +609,7 @@ class EventStore:
             output.append({"stage_id": stage["id"], "name": stage["name"],
                            "class_id": stage["class_id"], "kind": stage["kind"],
                            "group": stage["group"], "status": stage["status"],
+                           "superseded_by": stage.get("superseded_by"),
                            "race_id": stage.get("race_id"),
                            "drivers": race.get("drivers", []) if race else []})
         return output
@@ -516,7 +619,7 @@ class EventStore:
         entries = {str(e["transponder"]): e for e in event["entries"]}
         groups = {}
         for result in self.results(event_id):
-            if result["status"] != "saved" or result["kind"] not in ("main", "final"):
+            if result["status"] != "saved" or result["superseded_by"] or result["kind"] not in ("main", "final"):
                 continue
             key = (result["class_id"], result["group"])
             bucket = groups.setdefault(key, {})

@@ -20,7 +20,7 @@ index a5c5a91..33a6312 100644
  
  if(WIN32 AND (USE_HACKRF OR USE_RTLSDR))
 diff --git a/src/commons.cpp b/src/commons.cpp
-index ac38a68..8b4347d 100644
+index ac38a68..8857f86 100644
 --- a/src/commons.cpp
 +++ b/src/commons.cpp
 @@ -16,7 +16,6 @@
@@ -31,24 +31,20 @@ index ac38a68..8b4347d 100644
  
  using namespace std::chrono;
  
-@@ -36,11 +35,6 @@ static const uint64_t startup_ts = duration_cast<microseconds>(steady_clock::now
+@@ -36,9 +35,6 @@ static const uint64_t startup_ts = duration_cast<microseconds>(steady_clock::now
  static bool mode_sysclk = false;
  static uint64_t timecode = 0ul;
  
 -static std::string storage_dir = ".";
 -static std::unique_ptr<RC4FileBasedRegistry> rc4_registry;
 -static RC4Trainer rc4_trainer;
--static AmbRcBlacklist ambrc_blacklist;
--
- bool process_frame(Frame* frame) {
-     frame->identify_preamble();
+ static AmbRcBlacklist ambrc_blacklist;
  
-@@ -67,54 +61,8 @@ bool process_frame(Frame* frame) {
-             return true;
-         }
+ bool process_frame(Frame* frame) {
+@@ -69,32 +65,17 @@ bool process_frame(Frame* frame) {
          break;
--        case TransponderProtocol::RC3: {
--            uint8_t status_code;
+         case TransponderProtocol::RC3: {
+             uint8_t status_code;
 -            // Vostok transponders transmit with the RC3 preamble, but use different framing.
 -            // decode_rc3() verifies an 8 bit tail, so ~1 in 256 Vostok frames might pass.
 -            // An RC3 frame satisfying all 48 bits of the Vostok check is ~2^-48.
@@ -57,11 +53,12 @@ index ac38a68..8b4347d 100644
 -                passing_detector.append(frame, TransponderSystem::Vostok, transponder_id);
 -                return true;
 -            }
--            if (decode_rc3(softbits, &transponder_id, &status_code)) {
--                if (transponder_id >= 10000000) { // not a 7-digit transponder for sure
--                    // check for known status/validation message (to track some statistics)
+             if (decode_rc3(softbits, &transponder_id, &status_code)) {
+                 if (transponder_id >= 10000000) { // not a 7-digit transponder for sure
+                     // check for known status/validation message (to track some statistics)
 -                    return ((status_code & 0x07) == 0); 
--                }
++                    return ((status_code & 0x07) == 0);
+                 }
 -                // status byte:
 -                // https://www.rctech.net/forum/showpost.php?p=16244070&postcount=1171
 -                // RC4 hybrid and "recent" RC3 indicate status messages in lower 3 bits (0x07 mask)
@@ -70,18 +67,21 @@ index ac38a68..8b4347d 100644
 -                // Old AMBRc DP transponders send *transponder* frames with all status bits set (0xff);
 -                // unfortunately newer models can transmit RC3 status/validation messages the same way.
 -                // Let's build a block-list for such transponders.
--                ambrc_blacklist.process(frame->timestamp, status_code, transponder_id);
--                if (status_code == 0xff && !ambrc_blacklist.check_banned(transponder_id)) {
--                    passing_detector.append(frame, TransponderSystem::AMB, transponder_id);
++                // Legacy AMB RC3 passings use 0xff. Ignore RC4 Hybrid and
++                // newer RC3 status values; the block-list filters validation
++                // frames that can also use 0xff.
+                 ambrc_blacklist.process(frame->timestamp, status_code, transponder_id);
+                 if (status_code == 0xff && !ambrc_blacklist.check_banned(transponder_id)) {
+                     passing_detector.append(frame, TransponderSystem::AMB, transponder_id);
 -                } else if ((status_code & 0x07) == 0) { // not a status/validation message for sure
 -                    passing_detector.append(frame, TransponderSystem::AMB, transponder_id);
--                }
--                // at this point decoding was success; if status byte indicates
--                // non-transponder message, it should not screw decoded statistics
--                return true;
--            }
--        }
--        break;
+                 }
+                 // at this point decoding was success; if status byte indicates
+                 // non-transponder message, it should not screw decoded statistics
+@@ -102,19 +83,8 @@ bool process_frame(Frame* frame) {
+             }
+         }
+         break;
 -        case TransponderProtocol::RC4: {
 -            RC4Message msg(softbits);
 -            if (!msg.is_valid) { // fails validation
@@ -100,7 +100,7 @@ index ac38a68..8b4347d 100644
      }
      return false;
  }
-@@ -197,8 +145,6 @@ bool parse_common_arguments(int& i, const int argc, const std::string& arg, char
+@@ -197,8 +167,6 @@ bool parse_common_arguments(int& i, const int argc, const std::string& arg, char
          monitor_mode = true;
      } else if (arg == "-t") {
          mode_sysclk = true;
@@ -109,7 +109,7 @@ index ac38a68..8b4347d 100644
      } else {
          return false;
      }
-@@ -219,9 +165,6 @@ void init_commons() {
+@@ -219,9 +187,6 @@ void init_commons() {
      publisher->bind(zmq_address);
      std::cout << "Listening on " << zmq_address << std::endl;
  
@@ -119,7 +119,16 @@ index ac38a68..8b4347d 100644
  }
  
  uint64_t reporting_timestamp(uint64_t timestamp_us, uint64_t steady_now, uint64_t sysclk_now) {
-@@ -276,45 +219,4 @@ void report_detections() {
+@@ -247,7 +212,7 @@ void report_detections() {
+         std::cout << report << std::endl;
+         publisher->send(zmq::buffer(report), zmq::send_flags::none);
+     }
+-    
++
+     std::vector<TimeSync> timesyncs = passing_detector.identify_timesyncs(500000l);
+     for (const auto& time_sync : timesyncs) {
+         const std::string report = std::format("T {} {} {} {}",
+@@ -276,45 +241,5 @@ void report_detections() {
          publisher->send(zmq::buffer(report), zmq::send_flags::none);
      }
  
@@ -161,26 +170,25 @@ index ac38a68..8b4347d 100644
 -        // no action
 -        break;
 -    }
--
+ 
 -    // re-sync rc4 transponder database
 -    rc4_registry->resync();
 -}
 \ No newline at end of file
 +}
 diff --git a/src/frame.cpp b/src/frame.cpp
-index af6c187..46e83be 100644
+index af6c187..be676da 100644
 --- a/src/frame.cpp
 +++ b/src/frame.cpp
-@@ -19,8 +19,6 @@
- 
+@@ -20,7 +20,6 @@
  // preamble matching
  static inline const Preamble<uint16_t> p_openstint(transponder_props(TransponderProtocol::OpenStint).dpsk_preamble, PREAMBLE_THRESHOLD*PREAMBLE_15BIT_PENALTY);
--static inline const Preamble<uint16_t> p_rc3(transponder_props(TransponderProtocol::RC3).dpsk_preamble, PREAMBLE_THRESHOLD*PREAMBLE_15BIT_PENALTY);
+ static inline const Preamble<uint16_t> p_rc3(transponder_props(TransponderProtocol::RC3).dpsk_preamble, PREAMBLE_THRESHOLD*PREAMBLE_15BIT_PENALTY);
 -static inline const Preamble<uint16_t> p_rc4(transponder_props(TransponderProtocol::RC4).dpsk_preamble, PREAMBLE_THRESHOLD);
  
  
  Frame::Frame() {
-@@ -216,13 +214,9 @@ std::optional<DetectionResult> FrameDetector::process_baseband(const std::comple
+@@ -216,10 +215,6 @@ std::optional<DetectionResult> FrameDetector::process_baseband(const std::comple
      s2 += std::norm(r[0]);
      n++;
      
@@ -190,25 +198,9 @@ index af6c187..46e83be 100644
 -
      // different manufacturers use different init sequence, DPSK first bit differs!
      // depending on threshold, we could loose 25-50% of messages with the wrong preamble!
--    // fix: set msb to 0, sligthly lower threshold, match rc3 last to prevent early false-match
-+    // fix: set msb to 0, sligthly lower threshold, use only the OpenStint preamble
-     buffers[idx].clear_next(); // do not use MSB for matching
- 
-     // v1 transponder use the correct init sequence (-1 -1 -1 -1)
-@@ -232,11 +226,6 @@ std::optional<DetectionResult> FrameDetector::process_baseband(const std::comple
-         return {{ TransponderProtocol::OpenStint, buffers[idx].calc_metric(p_openstint) }};
-     }
- 
--    // - AmbRC/RCHG/MRT use 0xF916 dpsk preamble
--    // - RC4Hybrid use 0x7916
--    if (buffers[idx].match_preamble(p_rc3)) {
--        return {{ TransponderProtocol::RC3, buffers[idx].calc_metric(p_rc3) }};
--    }
-     return std::nullopt;
- }
- 
+     // fix: set msb to 0, sligthly lower threshold, match rc3 last to prevent early false-match
 diff --git a/src/main_rtlsdr.cpp b/src/main_rtlsdr.cpp
-index 509fc23..509c519 100644
+index 509fc23..3ff6393 100644
 --- a/src/main_rtlsdr.cpp
 +++ b/src/main_rtlsdr.cpp
 @@ -69,6 +69,21 @@ void rx_callback(unsigned char* buf, uint32_t len, void* /*ctx*/) {
@@ -216,7 +208,7 @@ index 509fc23..509c519 100644
  
  int main(int argc, char** argv) {
 +    if (argc == 2 && std::strcmp(argv[1], "--protocol-check") == 0) {
-+        std::cout << "YURLAPS_OPN_ONLY=1\n";
++        std::cout << "YURLAPS_OPN_AMB_RC3=1\n";
 +        return 0;
 +    }
 +    if (argc == 2 && std::strcmp(argv[1], "--list-devices") == 0) {

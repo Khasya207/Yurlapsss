@@ -13,10 +13,10 @@ Biner ini DIBANGUN DARI SUMBER OpenStint, bukan karya kami sendiri.
 Perubahan yang kami lakukan pada sumber
 ---------------------------------------
 Patch pada src/CMakeLists.txt, src/frame.cpp, src/commons.cpp, dan
-src/main_rtlsdr.cpp mengganti nama biner menjadi YurLapsDecoder, membatasi
-deteksi dan pemrosesan hanya pada protokol OpenStint (OPN), serta menghapus
-jalur registry dan learning RC4. Algoritma perhitungan waktu passing OPN,
-demodulasi OPN, dan protokol ZeroMQ tidak diubah.
+src/main_rtlsdr.cpp mengganti nama biner menjadi YurLapsDecoder. Decoder
+menerima OpenStint (OPN) dan AMB RC3 lama (status 0xff), serta menghapus
+jalur registry dan learning RC4, RC4 Hybrid, dan Vostok. Algoritma
+perhitungan waktu passing, demodulasi OPN, dan protokol ZeroMQ tidak diubah.
 
 Patch lengkap tersedia di: patch/rename-target.patch
 

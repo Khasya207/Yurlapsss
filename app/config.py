@@ -100,7 +100,7 @@ class Config:
     decoder_devices: dict[str, dict] = field(default_factory=dict)  # serial -> gain, enabled
     decoder_use_system_clock: bool = False  # -t pakai jam sistem
     decoder_monitor: bool = False      # -m monitor mode (cetak frame)
-    decoder_auto_download: bool = False # hanya decoder OPN bawaan paket
+    decoder_auto_download: bool = False # hanya decoder OPN + AMB RC3 bawaan paket
     decoder_restart_max_delay: int = 30  # detik, batas backoff restart
     decoder_idle_restart: int = 15     # detik tanpa data ZMQ -> restart decoder
 
