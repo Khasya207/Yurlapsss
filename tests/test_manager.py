@@ -51,6 +51,9 @@ def check(cond, msg):
 # ---------------------------------------------------------------------------
 FAKE_DECODER = '''#!/usr/bin/env python3
 import sys, time, random
+if '--protocol-check' in sys.argv:
+    print('YURLAPS_OPN_ONLY=1')
+    sys.exit(0)
 sys.path.insert(0, {root!r})
 from tests.sim_decoder import SimulatedDecoder
 sim = SimulatedDecoder("tcp://127.0.0.1:5593", transponders=(555,), lap_seconds=(0.3,))
@@ -62,7 +65,7 @@ sys.exit(3)
 
 
 def write_fake_decoder(root: Path) -> Path:
-    path = root / "bin" / "openstint_rtlsdr"   # sengaja tanpa .exe (skrip)
+    path = root / "bin" / "YurLapsDecoder"   # sengaja tanpa .exe (skrip)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(FAKE_DECODER.format(root=str(Path(__file__).resolve().parent.parent)))
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
@@ -139,8 +142,11 @@ def test_manager_idle_detect():
     cfg.decoder_devices = {"YD-TEST": {"enabled": True, "gain": cfg.decoder_gain}}
 
     # Tidak ada passing selama beberapa detik adalah keadaan normal.
-    path = Path(DATA) / "bin" / "openstint_silent"
-    path.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(60)\n")
+    path = Path(DATA) / "bin" / "YurLapsDecoder"
+    path.write_text("#!/usr/bin/env python3\nimport sys, time\n"
+                    "if '--protocol-check' in sys.argv:\n"
+                    "    print('YURLAPS_OPN_ONLY=1'); sys.exit(0)\n"
+                    "time.sleep(60)\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     cfg.decoder_exe = str(path)
 

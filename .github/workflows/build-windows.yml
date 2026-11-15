@@ -73,8 +73,8 @@ jobs:
           YURLAPS_DATA: ${{ runner.temp }}/yl-man
 
   # ---------------------------------------------------------------------------
-  # 2. Decoder YurLaps: dibangun dari sumber OpenStint (GPL-3.0), satu patch
-  #    nama target. Hasilnya dipakai job "build" di bawah, jadi satu repo
+  # 2. Decoder YurLaps: dibangun dari sumber OpenStint (GPL-3.0), patch
+  #    OPN saja. Hasilnya dipakai job "build" di bawah, jadi satu repo
   #    menghasilkan aplikasi + decoder sekaligus.
   # ---------------------------------------------------------------------------
   decoder:
@@ -124,29 +124,15 @@ jobs:
           cd upstream
           git rev-parse HEAD | tee ../upstream-commit.txt
 
-          # Jaring pengaman: kalau checkout tetap CRLF, ubah ke LF sebelum patch.
-          CR=$(tr -cd '\r' < src/CMakeLists.txt | wc -c)
-          if [ "$CR" -ne 0 ]; then
-            echo "checkout ber-CRLF ($CR baris) - mengubah ke LF"
-            # CRLF -> LF tanpa bergantung pada paket tambahan
-            tr -d '\r' < src/CMakeLists.txt > src/CMakeLists.new
-            mv src/CMakeLists.new src/CMakeLists.txt
-          fi
-
-          # Cadangan terakhir: kalau git apply tetap menolak (mis. baris
-          # konteks bergeser karena versi upstream berubah), lakukan
-          # penggantian langsung - inilah satu-satunya isi patch kita.
-          if ! git apply --verbose ../decoder/patch/rename-target.patch; then
-            echo "git apply gagal - memakai penggantian langsung"
-            sed -i 's/openstint_add_decoder(openstint_rtlsdr /openstint_add_decoder(YurLapsDecoder /' \
-              src/CMakeLists.txt
-            grep -n "openstint_add_decoder(YurLapsDecoder" src/CMakeLists.txt
-          fi
-          # Pastikan hasil akhirnya benar, apa pun jalur yang dipakai.
-          if ! grep -q "openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp" src/CMakeLists.txt; then
-            echo "GAGAL: nama target tidak berubah menjadi YurLapsDecoder"; exit 1
-          fi
-          echo "OK: target decoder bernama YurLapsDecoder"
+          # Jangan membangun decoder dengan dukungan RC jika patch tidak cocok.
+          git apply --check ../decoder/patch/rename-target.patch
+          git apply ../decoder/patch/rename-target.patch
+          grep -q 'openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp' src/CMakeLists.txt
+          ! grep -q 'rc4.cpp' src/CMakeLists.txt
+          ! grep -q 'match_preamble(p_rc3)' src/frame.cpp
+          ! grep -q 'match_preamble(p_rc4)' src/frame.cpp
+          ! grep -q 'rc4_trainer\|rc4_registry\|decode_rc3' src/commons.cpp
+          echo "OK: YurLapsDecoder hanya mendeteksi OPN"
 
       - name: Build liquid-dsp
         shell: msys2 {0}
@@ -231,6 +217,10 @@ jobs:
           Set-Location decoder-out
           # Test exactly the packaged DLLs, without MSYS2 satisfying omissions.
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $protocol = (& .\YurLapsDecoder.exe --protocol-check 2>&1 | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $protocol -notmatch 'YURLAPS_OPN_ONLY=1') {
+            throw "Decoder paket bukan build OPN saja: $protocol"
+          }
           $output = (& .\YurLapsDecoder.exe --salah 2>&1 | Out-String)
           if ($output -notmatch 'Usage') {
             throw "Decoder paket gagal dijalankan: $output"

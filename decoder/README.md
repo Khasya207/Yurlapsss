@@ -16,7 +16,7 @@ repo YurLaps (private, satu saja)
 │     ├── job build            → mesin + Electron + installer   ← butuh decoder
 │     └── (jalur Windows 8 sudah dihapus — YurLaps kini Windows 10+)
 ├── decoder/
-│     ├── patch/rename-target.patch     satu-satunya perubahan pada sumber
+│     ├── patch/rename-target.patch     patch OPN-only pada sumber
 │     ├── patch/upstream-ref.txt        versi OpenStint dikunci (v260830.1)
 │     ├── ATTRIBUTION.txt               atribusi GPL + sumber lengkap
 │     └── cara.ps1                      build manual di Windows

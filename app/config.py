@@ -100,7 +100,7 @@ class Config:
     decoder_devices: dict[str, dict] = field(default_factory=dict)  # serial -> gain, enabled
     decoder_use_system_clock: bool = False  # -t pakai jam sistem
     decoder_monitor: bool = False      # -m monitor mode (cetak frame)
-    decoder_auto_download: bool = True # unduh rilis resmi kalau belum ada
+    decoder_auto_download: bool = False # hanya decoder OPN bawaan paket
     decoder_restart_max_delay: int = 30  # detik, batas backoff restart
     decoder_idle_restart: int = 15     # detik tanpa data ZMQ -> restart decoder
 
@@ -163,11 +163,11 @@ class Config:
 
     # ----------------------------------------------------------------------
     def effective_decoder_args(self) -> list[str]:
-        """Argumen baris perintah final untuk openstint_rtlsdr.
+        """Argumen baris perintah final untuk YurLapsDecoder.
 
         Gain & opsi radio disusun dari setelan terstruktur supaya UI bisa
         mengubahnya tanpa pengguna menyunting teks argumen. `decoder_args`
-        hanya untuk tambahan bebas (mis. ``-s data``).
+        hanya untuk tambahan bebas.
         """
         args: list[str] = []
         try:

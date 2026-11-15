@@ -68,15 +68,14 @@ if [ "\$CR" -ne 0 ]; then
   echo "  checkout ber-CRLF - mengubah ke LF"
   tr -d '\r' < src/CMakeLists.txt > n.tmp; mv n.tmp src/CMakeLists.txt
 fi
-if ! git apply --verbose ../decoder/patch/rename-target.patch; then
-  echo "  git apply gagal - memakai penggantian langsung"
-  sed -i 's/openstint_add_decoder(openstint_rtlsdr /openstint_add_decoder(YurLapsDecoder /' \
-    src/CMakeLists.txt
-fi
-if ! grep -q "openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp" src/CMakeLists.txt; then
-  echo "GAGAL: nama target tidak berubah"; exit 1
-fi
-echo "  sumber siap (target YurLapsDecoder)"
+git apply --check ../decoder/patch/rename-target.patch
+git apply ../decoder/patch/rename-target.patch
+grep -q 'openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp' src/CMakeLists.txt
+! grep -q 'rc4.cpp' src/CMakeLists.txt
+! grep -q 'match_preamble(p_rc3)' src/frame.cpp
+! grep -q 'match_preamble(p_rc4)' src/frame.cpp
+! grep -q 'rc4_trainer\|rc4_registry\|decode_rc3' src/commons.cpp
+echo "  sumber siap (YurLapsDecoder OPN saja)"
 "@
 
 Write-Host "== 3/4 liquid-dsp + libfec ==" -ForegroundColor Cyan

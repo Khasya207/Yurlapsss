@@ -103,6 +103,36 @@ def list_sdr_devices(vid: str = "0x0bda", pid: str = "0x2838") -> list[dict]:
     librtlsdr reads the actual USB string descriptor. Windows PnP is only a
     fallback; a location-generated instance ID is never treated as a serial.
     """
+    # The packaged decoder uses its own statically linked librtlsdr. Ask that
+    # same library for EEPROM serials before relying on Windows PnP IDs, which
+    # may change when the dongle's product descriptors are customized.
+    if IS_WINDOWS:
+        roots = [app_root() / "vendor" / "openstint",
+                 app_root() / "_internal" / "vendor" / "openstint"]
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            roots.insert(0, Path(base) / "vendor" / "openstint")
+        for root in roots:
+            exe = root / "YurLapsDecoder.exe"
+            if not exe.is_file():
+                continue
+            raw = _run([str(exe), "--list-devices"], timeout=5)
+            devices = []
+            for line in raw.splitlines():
+                fields = line.split("\t", 2)
+                if len(fields) != 3 or fields[0] != "YURLAPS_DEVICE":
+                    continue
+                try:
+                    index = int(fields[1])
+                except ValueError:
+                    continue
+                serial = fields[2].strip()
+                if serial:
+                    devices.append({"serial": serial, "name": "YurLaps Decoder",
+                                    "index": index, "source": "decoder",
+                                    "selectable": True})
+            if devices:
+                return _mark_unique(devices)
     candidates = []
     base = getattr(sys, "_MEIPASS", None)
     for root in filter(None, [Path(base) if base else None,

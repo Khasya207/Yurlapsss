@@ -1,16 +1,252 @@
 diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
-index 0a7b285..cddcf05 100644
+index a5c5a91..33a6312 100644
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
-@@ -63,7 +63,10 @@ endif()
+@@ -23,7 +23,6 @@ set(OPENSTINT_BASE_SOURCES
+     counters.cpp
+     commons.cpp
+     capture.cpp
+-    rc4.cpp
+     crash_handler.cpp
+ )
+ 
+@@ -62,7 +61,7 @@ endif()
  
  if(USE_RTLSDR)
      # RTL-SDR maxes out at the required minimum of 2.5 MSPS, so this is fixed.
 -    openstint_add_decoder(openstint_rtlsdr main_rtlsdr.cpp openstint::rtlsdr 2)
-+    # YurLaps: nama target diganti supaya biner yang dijalankan aplikasi
-+    # bernama YurLapsDecoder.exe. Perubahan ini adalah satu-satunya patch kita
-+    # di sumber OpenStint (lihat src/PATCH-YURLAPS.md).
 +    openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp openstint::rtlsdr 2)
  endif()
  
  if(WIN32 AND (USE_HACKRF OR USE_RTLSDR))
+diff --git a/src/commons.cpp b/src/commons.cpp
+index ac38a68..8b4347d 100644
+--- a/src/commons.cpp
++++ b/src/commons.cpp
+@@ -16,7 +16,6 @@
+ #include "frame.hpp"
+ #include "passing.hpp"
+ #include "counters.hpp"
+-#include "rc4.hpp"
+ 
+ using namespace std::chrono;
+ 
+@@ -36,11 +35,6 @@ static const uint64_t startup_ts = duration_cast<microseconds>(steady_clock::now
+ static bool mode_sysclk = false;
+ static uint64_t timecode = 0ul;
+ 
+-static std::string storage_dir = ".";
+-static std::unique_ptr<RC4FileBasedRegistry> rc4_registry;
+-static RC4Trainer rc4_trainer;
+-static AmbRcBlacklist ambrc_blacklist;
+-
+ bool process_frame(Frame* frame) {
+     frame->identify_preamble();
+ 
+@@ -67,54 +61,8 @@ bool process_frame(Frame* frame) {
+             return true;
+         }
+         break;
+-        case TransponderProtocol::RC3: {
+-            uint8_t status_code;
+-            // Vostok transponders transmit with the RC3 preamble, but use different framing.
+-            // decode_rc3() verifies an 8 bit tail, so ~1 in 256 Vostok frames might pass.
+-            // An RC3 frame satisfying all 48 bits of the Vostok check is ~2^-48.
+-            // => check Vostok first
+-            if (decode_vostok(softbits, &transponder_id)) {
+-                passing_detector.append(frame, TransponderSystem::Vostok, transponder_id);
+-                return true;
+-            }
+-            if (decode_rc3(softbits, &transponder_id, &status_code)) {
+-                if (transponder_id >= 10000000) { // not a 7-digit transponder for sure
+-                    // check for known status/validation message (to track some statistics)
+-                    return ((status_code & 0x07) == 0); 
+-                }
+-                // status byte:
+-                // https://www.rctech.net/forum/showpost.php?p=16244070&postcount=1171
+-                // RC4 hybrid and "recent" RC3 indicate status messages in lower 3 bits (0x07 mask)
+-                // Older RC3 indicate normal messages by setting all bits 1 (0xff)
+-                
+-                // Old AMBRc DP transponders send *transponder* frames with all status bits set (0xff);
+-                // unfortunately newer models can transmit RC3 status/validation messages the same way.
+-                // Let's build a block-list for such transponders.
+-                ambrc_blacklist.process(frame->timestamp, status_code, transponder_id);
+-                if (status_code == 0xff && !ambrc_blacklist.check_banned(transponder_id)) {
+-                    passing_detector.append(frame, TransponderSystem::AMB, transponder_id);
+-                } else if ((status_code & 0x07) == 0) { // not a status/validation message for sure
+-                    passing_detector.append(frame, TransponderSystem::AMB, transponder_id);
+-                }
+-                // at this point decoding was success; if status byte indicates
+-                // non-transponder message, it should not screw decoded statistics
+-                return true;
+-            }
+-        }
+-        break;
+-        case TransponderProtocol::RC4: {
+-            RC4Message msg(softbits);
+-            if (!msg.is_valid) { // fails validation
+-                return false;
+-            }
+-            if (rc4_registry->lookup(msg.payload, &transponder_id)) {
+-                passing_detector.append(frame, TransponderSystem::AMB, transponder_id);
+-                rc4_trainer.append(frame->timestamp, frame->rssi(), transponder_id, msg.payload);
+-                return true;
+-            }
+-            rc4_trainer.append(frame->timestamp, frame->rssi(), 0, msg.payload);
+-            return true;
+-        }
++        default:
++            break;
+     }
+     return false;
+ }
+@@ -197,8 +145,6 @@ bool parse_common_arguments(int& i, const int argc, const std::string& arg, char
+         monitor_mode = true;
+     } else if (arg == "-t") {
+         mode_sysclk = true;
+-    } else if (arg == "-s" && i + 1 < argc) {
+-        storage_dir = argv[++i];
+     } else {
+         return false;
+     }
+@@ -219,9 +165,6 @@ void init_commons() {
+     publisher->bind(zmq_address);
+     std::cout << "Listening on " << zmq_address << std::endl;
+ 
+-    // initial load rc4 transponder database
+-    rc4_registry = std::make_unique<RC4FileBasedRegistry>(storage_dir);
+-    rc4_registry->resync();
+ }
+ 
+ uint64_t reporting_timestamp(uint64_t timestamp_us, uint64_t steady_now, uint64_t sysclk_now) {
+@@ -276,45 +219,4 @@ void report_detections() {
+         publisher->send(zmq::buffer(report), zmq::send_flags::none);
+     }
+ 
+-    auto trainer_result = rc4_trainer.evaluate(now_ts);
+-    switch (trainer_result) {
+-        case RC4Trainer::EvaluationResult::START: {
+-            const auto report = std::format("L {} START {:.1f}", status_ts, rc4_trainer.last_rssi());
+-            std::cout << report << std::endl;
+-            publisher->send(zmq::buffer(report), zmq::send_flags::none);
+-        }
+-        break;
+-        case RC4Trainer::EvaluationResult::INTERRUPED: {
+-            const auto report = std::format("L {} INTERRUPTED", status_ts);
+-            std::cout << report << std::endl;
+-            publisher->send(zmq::buffer(report), zmq::send_flags::none);
+-        }
+-        break;
+-        case RC4Trainer::EvaluationResult::DONE: {
+-            uint32_t transponder_id = rc4_trainer.preferred_transponder_id();
+-            auto payloads = rc4_trainer.registry_payloads();
+-            auto [tsmin, tsmax] = rc4_trainer.buffer_timerange();
+-            auto detected_transponders = passing_detector.passings_between(TransponderSystem::AMB, tsmin, tsmax);
+-            if (transponder_id == 0 && detected_transponders.size() == 1) {
+-                transponder_id = detected_transponders.front();
+-            }
+-            transponder_id = rc4_registry->store(transponder_id, payloads);
+-            const auto report = std::format("L {} DONE {} {}", status_ts, transponder_id, payloads.size());
+-            std::cout << report << std::endl;
+-            publisher->send(zmq::buffer(report), zmq::send_flags::none);
+-        }
+-        break;
+-        case RC4Trainer::EvaluationResult::RESET: {
+-            const auto report = std::format("L {} RESET", status_ts);
+-            std::cout << report << std::endl;
+-            publisher->send(zmq::buffer(report), zmq::send_flags::none);
+-        }
+-        break;
+-        case RC4Trainer::EvaluationResult::NO_ACTION:
+-        // no action
+-        break;
+-    }
+-
+-    // re-sync rc4 transponder database
+-    rc4_registry->resync();
+-}
+\ No newline at end of file
++}
+diff --git a/src/frame.cpp b/src/frame.cpp
+index af6c187..46e83be 100644
+--- a/src/frame.cpp
++++ b/src/frame.cpp
+@@ -19,8 +19,6 @@
+ 
+ // preamble matching
+ static inline const Preamble<uint16_t> p_openstint(transponder_props(TransponderProtocol::OpenStint).dpsk_preamble, PREAMBLE_THRESHOLD*PREAMBLE_15BIT_PENALTY);
+-static inline const Preamble<uint16_t> p_rc3(transponder_props(TransponderProtocol::RC3).dpsk_preamble, PREAMBLE_THRESHOLD*PREAMBLE_15BIT_PENALTY);
+-static inline const Preamble<uint16_t> p_rc4(transponder_props(TransponderProtocol::RC4).dpsk_preamble, PREAMBLE_THRESHOLD);
+ 
+ 
+ Frame::Frame() {
+@@ -216,13 +214,9 @@ std::optional<DetectionResult> FrameDetector::process_baseband(const std::comple
+     s2 += std::norm(r[0]);
+     n++;
+     
+-    if (buffers[idx].match_preamble(p_rc4)) {       
+-        return {{ TransponderProtocol::RC4, buffers[idx].calc_metric(p_rc4) }};
+-    }
+-
+     // different manufacturers use different init sequence, DPSK first bit differs!
+     // depending on threshold, we could loose 25-50% of messages with the wrong preamble!
+-    // fix: set msb to 0, sligthly lower threshold, match rc3 last to prevent early false-match
++    // fix: set msb to 0, sligthly lower threshold, use only the OpenStint preamble
+     buffers[idx].clear_next(); // do not use MSB for matching
+ 
+     // v1 transponder use the correct init sequence (-1 -1 -1 -1)
+@@ -232,11 +226,6 @@ std::optional<DetectionResult> FrameDetector::process_baseband(const std::comple
+         return {{ TransponderProtocol::OpenStint, buffers[idx].calc_metric(p_openstint) }};
+     }
+ 
+-    // - AmbRC/RCHG/MRT use 0xF916 dpsk preamble
+-    // - RC4Hybrid use 0x7916
+-    if (buffers[idx].match_preamble(p_rc3)) {
+-        return {{ TransponderProtocol::RC3, buffers[idx].calc_metric(p_rc3) }};
+-    }
+     return std::nullopt;
+ }
+ 
+diff --git a/src/main_rtlsdr.cpp b/src/main_rtlsdr.cpp
+index 509fc23..509c519 100644
+--- a/src/main_rtlsdr.cpp
++++ b/src/main_rtlsdr.cpp
+@@ -69,6 +69,21 @@ void rx_callback(unsigned char* buf, uint32_t len, void* /*ctx*/) {
+ }
+ 
+ int main(int argc, char** argv) {
++    if (argc == 2 && std::strcmp(argv[1], "--protocol-check") == 0) {
++        std::cout << "YURLAPS_OPN_ONLY=1\n";
++        return 0;
++    }
++    if (argc == 2 && std::strcmp(argv[1], "--list-devices") == 0) {
++        const auto count = rtlsdr_get_device_count();
++        for (uint32_t index = 0; index < count; ++index) {
++            char manufacturer[256] = {0}, product[256] = {0}, serial[256] = {0};
++            if (rtlsdr_get_device_usb_strings(index, manufacturer, product, serial) == 0
++                    && serial[0] != '\0') {
++                std::cout << "YURLAPS_DEVICE\t" << index << "\t" << serial << '\n';
++            }
++        }
++        return 0;
++    }
+     int result;
+ 
+     const uint32_t sample_rate = SAMPLE_RATE;
+@@ -96,7 +111,7 @@ int main(int argc, char** argv) {
+             if (arg != "-h") {
+                 std::cerr << "Unknown argument: " << arg << "\n";
+             }
+-            std::cerr << "Usage: " << argv[0] << " [-d ser_nr] [-g <gain_dB>] [-D] [-b] [-c file.iq] [-p tcp_port] [-s dir] [-m] [-t]\n";
++            std::cerr << "Usage: " << argv[0] << " [-d ser_nr] [-g <gain_dB>] [-D] [-b] [-c file.iq] [-p tcp_port] [-m] [-t]\n";
+             std::cerr << "\t-d ser_nr   default:first\tserial number of the desired RTL-SDR\n";
+             std::cerr << "\t-g <0..40>  default:" << DEFAULT_GAIN_TENTHS_DB / 10 << "  \ttuner gain in dB\n";
+             std::cerr << "\t-b          default:off \tEnable bias-tee (+4.5 V)\n";
+@@ -104,7 +119,6 @@ int main(int argc, char** argv) {
+             std::cerr << "\t-p port     default:" << DEFAULT_ZEROMQ_PORT << "\tZeroMQ publisher port\n";
+             std::cerr << "\t-m          default:off \tEnable monitor mode (print received frames to stdout)\n";
+             std::cerr << "\t-t          default:off \tUse system clock as the timebase (beware of NTP jumps)\n";
+-            std::cerr << "\t-s dir      default:.   \tRC4 registry storage directory\n";
+ 
+             return 1;
+         }

@@ -12,16 +12,11 @@ Biner ini DIBANGUN DARI SUMBER OpenStint, bukan karya kami sendiri.
 
 Perubahan yang kami lakukan pada sumber
 ---------------------------------------
-Satu perubahan saja, pada src/CMakeLists.txt:
-
-  - openstint_add_decoder(openstint_rtlsdr main_rtlsdr.cpp openstint::rtlsdr 2)
-  + openstint_add_decoder(YurLapsDecoder  main_rtlsdr.cpp openstint::rtlsdr 2)
-
-Tujuannya hanya mengganti nama berkas hasil build agar di Task Manager
-pengguna terlihat "YurLapsDecoder.exe". Tidak ada perubahan pada:
-  * algoritma deteksi lintasan (src/passing.cpp)
-  * demodulasi, FEC, CRC, atau timing (src/frame.cpp, src/syndrome.cpp, dll.)
-  * protokol ZeroMQ
+Patch pada src/CMakeLists.txt, src/frame.cpp, src/commons.cpp, dan
+src/main_rtlsdr.cpp mengganti nama biner menjadi YurLapsDecoder, membatasi
+deteksi dan pemrosesan hanya pada protokol OpenStint (OPN), serta menghapus
+jalur registry dan learning RC4. Algoritma perhitungan waktu passing OPN,
+demodulasi OPN, dan protokol ZeroMQ tidak diubah.
 
 Patch lengkap tersedia di: patch/rename-target.patch
 

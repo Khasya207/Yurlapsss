@@ -8,22 +8,18 @@ Perilaku yang diinginkan (dan diimplementasikan di sini):
 * Kalau decoder mati (YurLaps Decoder terputus, crash, USB reset), percobaan
   berikutnya dilakukan setelah 5 detik; pemasangan USB membangunkan supervisor.
 * Proses yang masih hidup tidak di-restart hanya karena belum ada passing.
-* Kalau file decoder belum ada dan `decoder_auto_download` aktif → unduh rilis
-  resmi OpenStint dari GitHub ke folder `bin/`.
+* Biner yang dijalankan harus menandai diri sebagai build OPN-only YurLaps.
 * Status lengkap (proses hidup? berapa kali restart? kenapa gagal?) tersedia
   untuk UI lewat `status()`.
 """
 from __future__ import annotations
 
-import io
 import os
 import shutil
 import subprocess
 import sys
 import threading
 import time
-import urllib.request
-import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -32,17 +28,13 @@ from .config import Config, app_root, default_data_dir
 
 IS_WINDOWS = os.name == "nt"
 
-# Rilis resmi OpenStint (Windows x64). Bisa diganti lewat config.decoder_exe.
-OPENSTINT_RELEASE_API = "https://api.github.com/repos/zsellera/openstint/releases/latest"
-OPENSTINT_ASSET_HINT = "windows-x64-Release.zip"
+# URL rilis lama dipertahankan untuk kompatibilitas konfigurasi; tidak dipakai otomatis.
 
 # Nama file yang kita cari setelah ekstrak (rilis resmi memakai .exe; build
 # Linux tanpa ekstensi).
 # YurLapsDecoder = biner hasil build kita dari sumber OpenStint (GPL-3.0).
-# Nama lama tetap dicari belakangan supaya instalasi yang sudah ada tidak rusak.
-EXE_NAMES = ("YurLapsDecoder.exe", "YurLapsDecoder",
-             "openstint_rtlsdr.exe", "openstint_rtlsdr",
-             "openstint_hackrf.exe", "openstint_hackrf")
+# Biner lama tidak boleh otomatis dijalankan karena masih mendukung RC4.
+EXE_NAMES = ("YurLapsDecoder.exe", "YurLapsDecoder")
 RETRY_SECONDS = 5.0
 
 
@@ -135,7 +127,6 @@ class DecoderManager(threading.Thread):
         self.status = DecoderStatus()
         self._log_path = default_data_dir() / "decoder.log"
         self._log_path.parent.mkdir(parents=True, exist_ok=True)
-        self._download_thread: Optional[threading.Thread] = None
         # debounce untuk perubahan setelan (gain) supaya tidak restart beruntun
         self._restart_timer: Optional[threading.Timer] = None
         self._restart_lock = threading.Lock()
@@ -213,7 +204,7 @@ class DecoderManager(threading.Thread):
         """Cari biner decoder: config → vendor → bin data dir → PATH."""
         if self.cfg.decoder_exe:
             p = Path(self.cfg.decoder_exe).expanduser()
-            if p.is_file():
+            if p.is_file() and p.name in EXE_NAMES:
                 return p
         for base in self._vendor_dirs():
             for name in exe_names():
@@ -262,6 +253,17 @@ class DecoderManager(threading.Thread):
     # ------------------------------------------------------------------
     def _start_process(self, exe: Path) -> bool:
         exe = Path(exe).resolve()
+        try:
+            check = subprocess.run(command_for(exe) + ["--protocol-check"],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   stdin=subprocess.DEVNULL, cwd=str(exe.parent),
+                                   timeout=5, creationflags=0x08000000 if IS_WINDOWS else 0)
+            if check.returncode != 0 or b"YURLAPS_OPN_ONLY=1" not in check.stdout:
+                raise RuntimeError("Biner decoder belum mendukung mode OPN saja")
+        except Exception as exc:
+            self._publish(state="error", running=False, last_error=str(exc),
+                          message="Decoder perlu dibangun ulang dengan patch OPN saja.")
+            return False
         try:
             args = self.cfg.effective_decoder_args()
         except Exception:
@@ -414,26 +416,12 @@ class DecoderManager(threading.Thread):
                               message="Pilih serial RTL-SDR di menu Decoder lalu aktifkan.")
                 self._wait(RETRY_SECONDS)
                 continue
-            if self._device_present is not True:
-                self._publish(state="waiting", running=False, pid=None,
-                              message=f"Menunggu RTL-SDR {serial} dicolokkan …")
-                self._wait(RETRY_SECONDS)
-                continue
+            # USB/PnP enumeration is advisory. A saved serial can still be
+            # opened by librtlsdr when Windows hides it from the scan.
             exe = self.find_decoder()
 
             if exe is None:
-                if self.cfg.decoder_auto_download and self.auto_download_supported:
-                    self._ensure_download()
-                    # tunggu sebentar, unduhan berjalan di thread terpisah
-                    self._publish(state="downloading",
-                                  message="Mengunduh YurLaps Decoder …")
-                    self._wait(5)
-                    continue
-                hint = ("Letakkan biner YurLaps Decoder di folder bin/ atau "
-                        "aktifkan unduh otomatis." if self.auto_download_supported
-                        else "Biner YurLaps Decoder hanya tersedia untuk Windows. "
-                             "Di sistem ini, kompilasi sendiri lalu letakkan "
-                             "binernya di folder bin/.")
+                hint = "Pasang paket aplikasi yang menyertakan YurLapsDecoder OPN saja."
                 self._publish(state="error", running=False,
                               message="Decoder belum tersedia. " + hint)
                 self._wait(RETRY_SECONDS)
@@ -504,59 +492,6 @@ class DecoderManager(threading.Thread):
         self._publish(running=False, state="idle", message="Manajemen decoder berhenti.")
 
     # ------------------------------------------------------------------
-    # unduh otomatis
-    # ------------------------------------------------------------------
-    @property
-    def auto_download_supported(self) -> bool:
-        return IS_WINDOWS
-
-    def _ensure_download(self) -> None:
-        if self._download_thread and self._download_thread.is_alive():
-            return
-        self._download_thread = threading.Thread(target=self._download_decoder,
-                                                 name="decoder-download", daemon=True)
-        self._download_thread.start()
-
-    def _download_decoder(self) -> None:
-        target_dir = self.bin_dir()
-        try:
-            api = urllib.request.Request(OPENSTINT_RELEASE_API,
-                                         headers={"User-Agent": "YurLaps"})
-            import json
-            with urllib.request.urlopen(api, timeout=20) as r:
-                release = json.loads(r.read().decode())
-            asset = next((a for a in release.get("assets", [])
-                          if OPENSTINT_ASSET_HINT in a.get("name", "")), None)
-            if not asset:
-                raise RuntimeError("Aset rilis Windows tidak ditemukan di GitHub")
-            url = asset["browser_download_url"]
-            self.engine.log("info", f"Mengunduh decoder: {asset['name']} "
-                                    f"({asset['size']//1024//1024} MB)")
-            tmp = target_dir / "openstint-download.zip"
-            with urllib.request.urlopen(urllib.request.Request(
-                    url, headers={"User-Agent": "YurLaps"}), timeout=120) as resp, \
-                    open(tmp, "wb") as fh:
-                shutil.copyfileobj(resp, fh)
-            with zipfile.ZipFile(tmp) as zf:
-                zf.extractall(target_dir)
-            tmp.unlink(missing_ok=True)
-
-            # rapikan: pindahkan biner ke akar bin/ dan beri izin eksekusi
-            for name in EXE_NAMES:
-                for found in target_dir.rglob(name):
-                    if found.parent != target_dir:
-                        shutil.move(str(found), str(target_dir / name))
-                    if not IS_WINDOWS:
-                        os.chmod(target_dir / name, 0o755)
-            self.engine.log("ok", "YurLaps Decoder siap dipakai")
-            self._publish(state="idle", message="Decoder siap dijalankan.")
-        except Exception as exc:
-            self._publish(state="error",
-                          last_error=str(exc),
-                          message=f"Gagal mengunduh decoder: {exc}")
-            self.engine.log("error", f"Gagal mengunduh decoder: {exc}")
-
-    # ------------------------------------------------------------------
     def probe(self, timeout: int = 12) -> dict:
         """Jalankan decoder sekali secara manual untuk melihat apakah YurLaps Decoder
         bisa dibuka. Berguna setelah memasang driver / menyambungkan decoder.
@@ -566,10 +501,20 @@ class DecoderManager(threading.Thread):
         exe = self.find_decoder()
         if exe is None:
             return {"ok": False, "available": False,
-                    "message": "Biner decoder belum ada. Aktifkan unduh otomatis "
-                               "atau letakkan biner YurLaps Decoder di folder bin/.",
+                    "message": "Biner YurLapsDecoder OPN saja belum ada di paket aplikasi.",
                     "output": ""}
-        args = (self.cfg.decoder_args or "").split()
+        try:
+            check = subprocess.run(command_for(exe) + ["--protocol-check"],
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   stdin=subprocess.DEVNULL, cwd=str(exe.parent),
+                                   timeout=5, creationflags=0x08000000 if IS_WINDOWS else 0)
+            if check.returncode != 0 or b"YURLAPS_OPN_ONLY=1" not in check.stdout:
+                return {"ok": False, "message": "Biner decoder bukan build OPN saja.",
+                        "output": ""}
+        except Exception as exc:
+            return {"ok": False, "message": f"Pemeriksaan decoder gagal: {exc}",
+                    "output": ""}
+        args = self.cfg.effective_decoder_args()
         cmd = command_for(exe) + args
         flags = 0
         if IS_WINDOWS:

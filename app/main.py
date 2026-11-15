@@ -195,8 +195,13 @@ class YurLaps:
         try:
             from .devices import detect, can_install_driver, list_sdr_devices
             info = detect(self.cfg.driver_vid, self.cfg.driver_pid)
-            self.engine.device_info = info.to_dict()
             devices = list_sdr_devices(self.cfg.driver_vid, self.cfg.driver_pid)
+            if devices and not info.present:
+                info.present = True
+                info.name = "YurLaps Decoder"
+                info.status = "ok"
+                info.message = "Decoder ID dibaca dari perangkat."
+            self.engine.device_info = info.to_dict()
             self.engine.device_info["devices"] = devices
             ok, why = can_install_driver()
             self.engine.device_info["can_install"] = ok
