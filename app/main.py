@@ -119,9 +119,7 @@ class YurLaps:
         """Bagian yang dipakai kedua mode (web & native)."""
 
         # 1) pembaca ZeroMQ (selalu jalan, tidak peduli decoder asli/hilang)
-        self.decoder = DecoderClient(self.engine, self.cfg.zmq_endpoint,
-                                     reorder_ms=self.cfg.decoder_reorder_ms,
-                                     max_reorder_ms=self.cfg.decoder_reorder_max_ms)
+        self.decoder = DecoderClient(self.engine, self.cfg.zmq_endpoint)
         self.ctx.decoder_client = self.decoder
         self.decoder.start()
 
