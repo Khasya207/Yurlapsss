@@ -24,9 +24,12 @@ target_compile_options(yurlaps_decoder_core PRIVATE
 if(YURLAPS_WITH_RTLSDR)
     find_path(RTLSDR_INCLUDE_DIR rtl-sdr.h REQUIRED)
     find_library(RTLSDR_LIBRARY rtlsdr REQUIRED)
+    # The Blog librtlsdr DLL imports libusb symbols. Link its import library
+    # explicitly because the custom DLL prefix is not a CMake package target.
+    find_library(LIBUSB_LIBRARY NAMES usb-1.0 libusb-1.0 REQUIRED)
     target_compile_definitions(yurlaps_decoder_core PRIVATE YURLAPS_WITH_RTLSDR)
     target_include_directories(yurlaps_decoder_core PRIVATE ${RTLSDR_INCLUDE_DIR})
-    target_link_libraries(yurlaps_decoder_core PRIVATE ${RTLSDR_LIBRARY})
+    target_link_libraries(yurlaps_decoder_core PRIVATE ${RTLSDR_LIBRARY} ${LIBUSB_LIBRARY})
 endif()
 
 if(YURLAPS_WITH_ZMQ)
