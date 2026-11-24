@@ -3,7 +3,7 @@
 Jalankan:  python tests/test_manager.py
 
 Tidak butuh hardware: "decoder" dibuat sebagai skrip kecil yang mem-publish
-pesan OpenStint sintetis lalu keluar sendiri — persis seperti decoder yang
+pesan YurLaps sintetis lalu keluar sendiri — persis seperti decoder yang
 crash, sehingga kita bisa menguji restart otomatis.
 """
 from __future__ import annotations
@@ -52,7 +52,7 @@ def check(cond, msg):
 FAKE_DECODER = '''#!/usr/bin/env python3
 import sys, time, random
 if '--protocol-check' in sys.argv:
-    print('YURLAPS_OPN_AMB_RC3=1')
+    print('YURLAPS_YLP1=1')
     sys.exit(0)
 sys.path.insert(0, {root!r})
 from tests.sim_decoder import SimulatedDecoder
@@ -145,7 +145,7 @@ def test_manager_idle_detect():
     path = Path(DATA) / "bin" / "YurLapsDecoder"
     path.write_text("#!/usr/bin/env python3\nimport sys, time\n"
                     "if '--protocol-check' in sys.argv:\n"
-                    "    print('YURLAPS_OPN_AMB_RC3=1'); sys.exit(0)\n"
+                    "    print('YURLAPS_YLP1=1'); sys.exit(0)\n"
                     "time.sleep(60)\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC)
     cfg.decoder_exe = str(path)

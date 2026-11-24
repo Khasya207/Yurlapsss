@@ -31,8 +31,8 @@ class RecoveryImportTests(unittest.TestCase):
         receiver = DecoderClient(engine, 'tcp://127.0.0.1:5556')
         with patch('app.config.default_data_dir', return_value=Path(self.tmp.name)):
             with self.assertLogs('app.decoder', level='ERROR'):
-                self.assertFalse(receiver.process_message('P 100 OPN 123 -20 5 90000'))
-            self.assertTrue(receiver.process_message('P 200 OPN 123 -20 5 90000'))
+                self.assertFalse(receiver.process_message('P 100 YUL 123 -20 5 90000'))
+            self.assertTrue(receiver.process_message('P 200 YUL 123 -20 5 90000'))
         self.assertEqual(engine.on_passing.call_count, 2)
         self.assertEqual(receiver.rx_counts['P'], 2)
         self.assertIn('database failure', (Path(self.tmp.name)/'receiver-errors.log').read_text())

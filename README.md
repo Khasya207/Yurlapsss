@@ -1,6 +1,6 @@
 # YurLaps 0.4.1
 
-YurLaps mencatat passing dari YurLaps Decoder/OpenStint, menjalankan Practice dan
+YurLaps mencatat passing dari YurLapsDecoder YLP-1, menjalankan Practice dan
 Quick Race, menyimpan hasil lokal, lalu menyinkronkannya ke website YurLaps.
 Target installer: Windows 10/11 x64. Source Python juga dapat dijalankan sebagai
 server web lokal; dukungan hardware ARM memerlukan build dan pengujian tersendiri.
@@ -86,7 +86,7 @@ Migration tambahan:
 File tersebut harus diterapkan pada proyek Supabase yang digunakan; keberadaan
 file dalam paket tidak berarti migration sudah dijalankan di server.
 
-Installer Electron membaca rilis dari `https://yurlaps.dpdns.org/releases/`.
+Installer Electron membaca rilis dari `https://yurlaps-website.vercel.app/releases/`.
 Pembaruan diunduh dari domain website, lalu dipasang dengan restart tanpa
 uninstall. Gunakan menu Pembaruan. Source/browser mode tidak memasang update
 Windows. Rilis baru baru tersedia setelah build dan publikasi berhasil.
@@ -94,7 +94,7 @@ Windows. Rilis baru baru tersedia setelah build dan publikasi berhasil.
 ## Menjalankan source
 
 Windows: `jalankan.bat` membuat virtual environment, memasang `requirements.txt`,
-lalu membuka UI lengkap. Decoder `.exe` dan DLL harus ada di `vendor/openstint`
+lalu membuka UI lengkap. Decoder `.exe` dan DLL harus ada di `vendor/decoder`
 untuk menjalankan SDR otomatis; source ZIP tidak berisi binary hasil build.
 
 ```bash

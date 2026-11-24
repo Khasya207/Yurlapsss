@@ -1,0 +1,26 @@
+YurLapsDecoder.exe - komponen dan lisensi
+=========================================
+
+YurLapsDecoder.exe ditulis oleh YurLaps (kode sumber: decoder/native/ pada
+repo aplikasi ini; protokol: decoder/docs/YURLAPS-PROTOCOL-DRAFT.md).
+
+Paket decoder membawa pustaka pihak ketiga berikut. Masing-masing tetap
+memakai lisensinya sendiri:
+
+  librtlsdr (fork RTL-SDR Blog, dukungan V4)   GPL-2.0-or-later
+      https://github.com/rtlsdrblog/rtl-sdr-blog
+      Teks lisensi: licenses/librtlsdr-COPYING.txt
+      Versi yang dibangun: lihat licenses/librtlsdr-commit.txt
+  libzmq (ZeroMQ)                              LGPL-3.0 (dengan pengecualian linking statis)
+      https://github.com/zeromq/libzmq
+  libusb                                       LGPL-2.1-or-later
+      https://libusb.info/
+  libsodium                                    ISC
+      https://libsodium.org/
+  Runtime MinGW-w64 (libgcc, libstdc++, libwinpthread)
+      GCC Runtime Library Exception / MIT
+
+librtlsdr berlisensi GPL. Decoder ini ditautkan dengan pustaka itu, jadi
+pendistribusian paket yang membawa librtlsdr.dll harus memenuhi syarat GPL
+untuk pustaka tersebut (teks lisensi, pemberitahuan, akses ke sumbernya).
+Sumber librtlsdr yang dipakai ada di URL di atas pada commit yang tercatat.

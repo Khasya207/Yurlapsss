@@ -26,10 +26,10 @@ from .member_sync import _read_all, refresh_members, refresh_visiting_drivers
 from .race_upload import SupabaseRaceClient, UploadError, upload_pending, upload_pending_practice, upload_pending_deletions
 from .event_sync import sync_events
 
-DEFAULT_URL = "https://eottbwdcxrhgxadwnlmy.supabase.co"
+DEFAULT_URL = "https://imlgplouxmffcqktoiyv.supabase.co"
 # Publishable client key only; authorization is enforced by the user's JWT + RLS.
-DEFAULT_KEY = "sb_publishable_pNLXpdEMYvhqyvDvfFLS_g_CfAYv1rX"
-DEFAULT_WEBSITE = "https://yurlaps.dpdns.org"
+DEFAULT_KEY = "sb_publishable_ksvQvAW9WAVz_p7K1OJ2UQ_InKAMWto"
+DEFAULT_WEBSITE = "https://yurlaps-website.vercel.app"
 
 
 class CloudService:

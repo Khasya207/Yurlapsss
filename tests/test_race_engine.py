@@ -29,7 +29,7 @@ class OfflineRaceTests(unittest.TestCase):
         self.race.set_cfg({'target':'laps','value':3,'start_mode':'grid','cd':0})
 
     def status(self,ts):self.decoder._dispatch_message(f'S {ts} -41.25 5.08 77 52')
-    def passing(self,ts,tp=11,duration=90000):self.decoder._dispatch_message(f'P {ts} OPN {tp} -35.5 64 {duration}')
+    def passing(self,ts,tp=11,duration=90000):self.decoder._dispatch_message(f'P {ts} YUL {tp} -35.5 64 {duration}')
     def go(self):
         self.status(10000)
         self.race.mulai()
@@ -69,7 +69,7 @@ class OfflineRaceTests(unittest.TestCase):
         self.go()
         for t in [11000,21000,21000,19000,21100,31000]:self.passing(t)
         self.assertEqual(self.race.peserta[0]['laps'],[10000,10000])
-        self.decoder._dispatch_message('P nope OPN 11 -30 20 90000')
+        self.decoder._dispatch_message('P nope YUL 11 -30 20 90000')
         self.assertEqual(self.decoder.rx_counts['bad'],1)
 
     def test_staggered_first_passing_is_zero(self):

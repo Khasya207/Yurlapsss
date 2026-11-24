@@ -25,7 +25,7 @@ class DummyEngine:
 class DecoderSelectionTest(unittest.TestCase):
     def test_bundled_decoder_lists_custom_eeprom_serial(self):
         with tempfile.TemporaryDirectory() as folder:
-            exe = Path(folder) / 'vendor' / 'openstint' / 'YurLapsDecoder.exe'
+            exe = Path(folder) / 'vendor' / 'decoder' / 'YurLapsDecoder.exe'
             exe.parent.mkdir(parents=True)
             exe.write_bytes(b'MZ')
             with patch.object(devices, 'IS_WINDOWS', True), \
@@ -51,9 +51,9 @@ class DecoderSelectionTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder, \
              patch('app.decoder_manager.default_data_dir', return_value=Path(folder)), \
              patch('app.decoder_manager.app_root', return_value=Path(folder)):
-            old = Path(folder) / 'openstint_rtlsdr.exe'
+            old = Path(folder) / 'old_decoder.exe'
             old.write_bytes(b'MZ')
-            bundled = Path(folder) / 'vendor' / 'openstint' / 'YurLapsDecoder.exe'
+            bundled = Path(folder) / 'vendor' / 'decoder' / 'YurLapsDecoder.exe'
             bundled.parent.mkdir(parents=True)
             bundled.write_bytes(b'MZ')
             manager = DecoderManager(Config(decoder_exe=str(old)), DummyEngine())
@@ -89,10 +89,10 @@ class DecoderSelectionTest(unittest.TestCase):
         client.process_message('L 101 DONE 44 5')
         self.assertEqual(engine.seen, [])
         self.assertEqual(client.rx_counts['bad'], 0)
-        client.process_message('P 102 OPN 45 -30 2 90000')
-        client.process_message('P 103 AMB 46 -30 2 90000')
-        self.assertEqual(engine.seen, [('OPN', 45), ('AMB', 46)])
-        self.assertEqual(parse_passing('P 103 AMB 46 -30 2 90000').transponder_type, 'AMB')
+        client.process_message('P 102 YUL 45 -30 2 90000')
+        client.process_message('P 103 YUL 46 -30 2 90000')
+        self.assertEqual(engine.seen, [('YUL', 45), ('YUL', 46)])
+        self.assertEqual(parse_passing('P 103 YUL 46 -30 2 90000').transponder_type, 'YUL')
 
     def test_passing_jitter_is_reordered_by_decoder_timestamp(self):
         class Engine:
@@ -103,8 +103,8 @@ class DecoderSelectionTest(unittest.TestCase):
         engine = Engine()
         client = DecoderClient(engine, "inproc://test", reorder_ms=40)
         client._reorder_enabled = True
-        client._dispatch_message("P 120 OPN 11 -30 2 90000")
-        client._dispatch_message("P 100 OPN 22 -30 2 90000")
+        client._dispatch_message("P 120 YUL 11 -30 2 90000")
+        client._dispatch_message("P 100 YUL 22 -30 2 90000")
         self.assertEqual(engine.seen, [])
         client._flush_pending(force=True)
         self.assertEqual(engine.seen, [(22, 100), (11, 120)])
@@ -119,10 +119,10 @@ class DecoderSelectionTest(unittest.TestCase):
         engine = Engine()
         client = DecoderClient(engine, "inproc://test", reorder_ms=40)
         client._reorder_enabled = True
-        client._dispatch_message("P 120 OPN 11 -30 2 90000")
-        client._dispatch_message("P 100 AMB 22 -30 2 90000")
+        client._dispatch_message("P 120 YUL 11 -30 2 90000")
+        client._dispatch_message("P 100 YUL 22 -30 2 90000")
         client._flush_pending(force=True)
-        self.assertEqual(engine.seen, [("AMB", 22), ("OPN", 11)])
+        self.assertEqual(engine.seen, [("YUL", 22), ("YUL", 11)])
 
     def test_three_passings_wait_for_quiet_window(self):
         class Engine:
@@ -138,7 +138,7 @@ class DecoderSelectionTest(unittest.TestCase):
                                                     (1.02, 115, 2),
                                                     (1.035, 100, 3)]:
                 clock.return_value = arrival
-                client._dispatch_message(f'P {timestamp} OPN {transponder} -30 2 90000')
+                client._dispatch_message(f'P {timestamp} YUL {transponder} -30 2 90000')
             clock.return_value = 1.074
             client._flush_pending()
             self.assertEqual(engine.seen, [])
@@ -158,7 +158,7 @@ class DecoderSelectionTest(unittest.TestCase):
         with patch('app.decoder.time.monotonic') as clock:
             for i, arrival in enumerate((1.0, 1.035, 1.07, 1.105, 1.14)):
                 clock.return_value = arrival
-                client._dispatch_message(f'P {100+i} OPN {i+1} -30 2 90000')
+                client._dispatch_message(f'P {100+i} YUL {i+1} -30 2 90000')
             self.assertEqual(engine.seen, [])
             clock.return_value = 1.151
             client._flush_pending()
@@ -173,8 +173,8 @@ class DecoderSelectionTest(unittest.TestCase):
         engine = Engine()
         client = DecoderClient(engine, 'inproc://test', reorder_ms=40)
         client._reorder_enabled = True
-        client._dispatch_message('P 100000 OPN 1 -30 2 90000')
-        client._dispatch_message('P 200 OPN 2 -30 2 90000')
+        client._dispatch_message('P 100000 YUL 1 -30 2 90000')
+        client._dispatch_message('P 200 YUL 2 -30 2 90000')
         self.assertEqual(engine.seen, [100000])
         client._flush_pending(force=True)
         self.assertEqual(engine.seen, [100000, 200])
@@ -193,8 +193,8 @@ class DecoderSelectionTest(unittest.TestCase):
         client._reorder_enabled = True
         with tempfile.TemporaryDirectory() as folder, \
              patch('app.config.default_data_dir', return_value=Path(folder)):
-            client._dispatch_message('P 100 OPN 1 -30 2 90000')
-            client._dispatch_message('P 101 OPN 2 -30 2 90000')
+            client._dispatch_message('P 100 YUL 1 -30 2 90000')
+            client._dispatch_message('P 101 YUL 2 -30 2 90000')
             with self.assertLogs('app.decoder', level='ERROR'):
                 client._flush_pending(force=True)
             self.assertIn('storage failed', (Path(folder) / 'receiver-errors.log').read_text())

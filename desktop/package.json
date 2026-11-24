@@ -68,7 +68,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://yurlaps.dpdns.org/releases/"
+        "url": "https://yurlaps-website.vercel.app/releases/"
       }
     ]
   },

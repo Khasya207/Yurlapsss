@@ -1,7 +1,7 @@
 # Akun website dan sinkronisasi offline
 
 Gunakan tombol **Akun → Login melalui website**. Browser membuka
-https://yurlaps.dpdns.org/desktop-login, menggunakan email/password dan CAPTCHA
+https://yurlaps-website.vercel.app/desktop-login, menggunakan email/password dan CAPTCHA
 website. Login pertama dan pengambilan data awal memerlukan internet. Akun
 harus menjadi **leader aktif** pada setidaknya satu club. Pilih club di panel
 akun bila akun memimpin beberapa club.
@@ -43,7 +43,7 @@ login diperiksa, termasuk hasil tertunda dari club sebelumnya.
 
 ## Konfigurasi dan rollout
 
-Default memakai proyek Supabase website `eottbwdcxrhgxadwnlmy` dan domain publik
+Default memakai proyek Supabase website `imlgplouxmffcqktoiyv` dan domain publik
 YurLaps. Hanya publishable key yang disertakan. Service-role key tidak digunakan.
 Override pengembangan: `YURLAPS_SUPABASE_URL`, `YURLAPS_SUPABASE_KEY`, dan
 `YURLAPS_WEBSITE_URL` (HTTPS). Sesi dari proyek berbeda tidak digunakan ulang.

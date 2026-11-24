@@ -1,0 +1,39 @@
+#pragma once
+
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <variant>
+
+namespace yurlaps::decoder {
+
+enum class TransponderType { YURLAPS };
+
+struct Passing {
+    std::uint64_t timestamp_ms{};
+    TransponderType type{};
+    std::uint32_t id{};
+    double rssi{};
+    std::uint32_t hits{};
+    std::uint64_t duration_us{};
+    std::optional<double> mer;
+};
+
+struct Status {
+    std::uint64_t timestamp_ms{};
+    double noise_db{};
+    double dc_offset{};
+    std::uint64_t frames_received{};
+    std::uint64_t frames_processed{};
+    std::optional<double> jitter_p95_ms;
+};
+
+using Event = std::variant<Passing, Status>;
+
+// Parse one documented YLP decoder line. Unknown records return nullopt.
+std::optional<Event> parse_line(std::string_view line);
+
+std::string format_event(const Event& event);
+
+}  // namespace yurlaps::decoder

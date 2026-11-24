@@ -17,9 +17,9 @@ hidden = collect_submodules("zmq") + [
 
 # Komponen pihak ketiga (lihat tools/fetch_vendor.py):
 #   vendor/win/zadig.exe        -> pemasang driver WinUSB (libwdi, GPL-3.0)
-#   vendor/openstint/*.exe      -> decoder OpenStint (opsional, bisa unduh sendiri)
+#   vendor/decoder/*.exe       -> YurLapsDecoder + DLL (dibangun CI dari decoder/native)
 datas = [("app/static", "app/static"), ("assets", "assets")]
-for extra in ("vendor/win", "vendor/openstint"):
+for extra in ("vendor/win", "vendor/decoder"):
     if os.path.isdir(extra):
         datas.append((extra, extra))
 # Tkinter DIPAKAI (UI native); pywebview/pythonnet tetap tidak dibundel.

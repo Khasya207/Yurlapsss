@@ -63,7 +63,7 @@ def test_gain_args():
 def test_pass_log():
     from app.engine import Engine
     eng = Engine(Config())
-    p = parse_passing("P 1234 OPN 7654321 -2.10 55 91000 12.5")
+    p = parse_passing("P 1234 YUL 7654321 -2.10 55 91000 12.5")
     d = eng.driver(p.transponder_id, p.transponder_type)
     eng.log_pass(p, d, "lap", lap_ms=9123, seq=1)
     entry = eng.pass_log[-1]
@@ -85,17 +85,17 @@ def test_lap_from_decoder_timestamp():
     eng = Engine(cfg)
     tid = 5550001
     # lintasan 1 -> titik nol
-    eng.on_passing(Passing(transponder_id=tid, transponder_type="OPN",
+    eng.on_passing(Passing(transponder_id=tid, transponder_type="YUL",
                            rssi=-3.0, decoder_timecode=100000))
     # lintasan 2 -> harus 9123 ms (selisih timestamp), walau jam komputer ~0
-    lap = eng.on_passing(Passing(transponder_id=tid, transponder_type="OPN",
+    lap = eng.on_passing(Passing(transponder_id=tid, transponder_type="YUL",
                                  rssi=-3.2, decoder_timecode=109123))
     check(lap is not None and lap.time_ms == 9123,
           f"lap dihitung dari timestamp decoder: {lap.time_ms if lap else None} ms")
     check(lap.decoder_timecode == 109123, "timestamp lintasan disimpan di lap")
 
     # decoder restart -> timestamp mundur, harus jatuh ke jam komputer (tidak negatif)
-    lap2 = eng.on_passing(Passing(transponder_id=tid, transponder_type="OPN",
+    lap2 = eng.on_passing(Passing(transponder_id=tid, transponder_type="YUL",
                                   rssi=-3.1, decoder_timecode=120))
     check(lap2 is None, "timestamp mundur tidak menghasilkan lap negatif")
 
@@ -111,12 +111,12 @@ def test_lap_from_decoder_timestamp():
 
 
 def test_parse():
-    p = parse_passing("P 1618706341 OPN 1615544 3.50 64 89113 24.3")
+    p = parse_passing("P 1618706341 YUL 1615544 3.50 64 89113 24.3")
     check(p is not None and p.transponder_id == 1615544, "parse pesan P")
     check(p.rssi == 3.50 and p.pass_duration_us == 89113 and p.mer == 24.3,
           "parse atribut P lengkap")
     check(parse_passing("S 1 -41 5 0 0 3") is None, "pesan S bukan passing")
-    check(parse_passing("P 1 OPN") is None, "pesan cacat tidak crash")
+    check(parse_passing("P 1 YUL") is None, "pesan cacat tidak crash")
 
 
 def test_engine_logic():
@@ -128,18 +128,18 @@ def test_engine_logic():
     eng = Engine(cfg, storage=store)
 
     # lintasan pertama -> buka stint, bukan lap
-    check(eng.on_passing(Passing(111, "OPN", decoder_timecode=10000)) is None, "lintasan pertama buka stint")
+    check(eng.on_passing(Passing(111, "YUL", decoder_timecode=10000)) is None, "lintasan pertama buka stint")
     eng.drivers[111].last_pass_mono -= 2.0   # pura-pura 2 detik lalu
-    lap = eng.on_passing(Passing(111, "OPN", rssi=-3.1, mer=11.2, decoder_timecode=12000))
+    lap = eng.on_passing(Passing(111, "YUL", rssi=-3.1, mer=11.2, decoder_timecode=12000))
     check(lap is not None and 1900 <= lap.time_ms <= 2100, f"lap pertama ~2000ms ({lap.time_ms})")
 
     # lintasan terlalu cepat -> diabaikan
-    ghost = eng.on_passing(Passing(111, "OPN", decoder_timecode=12100))
+    ghost = eng.on_passing(Passing(111, "YUL", decoder_timecode=12100))
     check(ghost is None, "lap < min_lap_seconds diabaikan (anti-ghost)")
 
     # lap valid berikutnya
     eng.drivers[111].last_pass_mono -= 3.0
-    lap2 = eng.on_passing(Passing(111, "OPN", decoder_timecode=15000))
+    lap2 = eng.on_passing(Passing(111, "YUL", decoder_timecode=15000))
     check(lap2 is not None and lap2.seq == 2, "lap kedua tercatat (seq=2)")
 
     d = eng.drivers[111]
@@ -156,7 +156,7 @@ def test_engine_logic():
     eng.drivers[111].last_pass_mono -= 10
     eng.tick()
     check(d.current is None, "stint ditutup setelah idle")
-    eng.on_passing(Passing(111, "OPN", decoder_timecode=25000))
+    eng.on_passing(Passing(111, "YUL", decoder_timecode=25000))
     check(d.current is not None and d.current.index == 2, "stint #2 dibuka otomatis")
 
     # snapshot & payload online

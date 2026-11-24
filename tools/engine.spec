@@ -28,7 +28,7 @@ def _datas():
         (str(PROJECT / "app" / "static"), "app/static"),
         (str(ASSETS / "yurlaps-logo.png"), "assets"),
     ]
-    for extra in ("vendor/win", "vendor/openstint"):
+    for extra in ("vendor/win", "vendor/decoder"):
         src = PROJECT / extra
         if src.is_dir():
             items.append((str(src), extra))

@@ -10,7 +10,7 @@ import time
 
 
 class SimulatedDecoder(threading.Thread):
-    """Publish pesan OpenStint sintetis ke alamat ZeroMQ (khusus uji)."""
+    """Publish pesan YurLaps sintetis ke alamat ZeroMQ (khusus uji)."""
 
     def __init__(self, endpoint: str, transponders=(1615544, 3616557, 4021888),
                  lap_seconds=(9.4, 10.8, 12.3), speed: float = 1.0):
@@ -59,7 +59,7 @@ class SimulatedDecoder(threading.Thread):
                 if now >= next_lap[tid]:
                     base = self.lap_seconds[i % len(self.lap_seconds)]
                     next_lap[tid] = now + base + random.uniform(-0.45, 0.6)
-                    typ = "OPN" if i % 2 == 0 else "AMB"
+                    typ = "YUL"
                     sock.send_string(
                         f"P {int(now*1000)} {typ} {tid} {random.uniform(-4.2,-2.4):.2f} "
                         f"{random.randint(40,80)} {random.randint(82000,102000)} "

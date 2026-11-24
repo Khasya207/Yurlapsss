@@ -1,89 +1,34 @@
-# Decoder YurLaps — satu repo dengan aplikasi
+# Decoder YurLaps (YLP-1)
 
-Decoder **`YurLapsDecoder.exe`** dibangun dari sumber
-[OpenStint](https://github.com/zsellera/openstint) (GPL-3.0) dengan patch
-yang mengaktifkan OPN dan AMB RC3 lama. RC4, RC4 Hybrid, dan Vostok tidak
-diterima sebagai passing.
+`YurLapsDecoder.exe` dibangun dari sumber di `native/`, ditulis khusus untuk
+protokol YLP-1 (`docs/YURLAPS-PROTOCOL-DRAFT.md`). Tidak ada kode decoder pihak lain di
+dalamnya.
 
-Tidak perlu repo terpisah. Workflow di `.github/workflows/build-windows.yml`
-punya job **`decoder`** yang berjalan sebelum job `build`, dan hasilnya diunduh
-ke `vendor/openstint/` sebelum aplikasi dibangun.
+Workflow `.github/workflows/build-windows.yml` punya job **`decoder`** yang:
 
-```
-repo YurLaps (private, satu saja)
-├── .github/workflows/build-windows.yml
-│     ├── job test             → uji logika (Linux)
-│     ├── job decoder          → build YurLapsDecoder.exe (Windows/MSYS2)
-│     ├── job build            → mesin + Electron + installer   ← butuh decoder
-│     └── (jalur Windows 8 sudah dihapus — YurLaps kini Windows 10+)
-├── decoder/
-│     ├── patch/rename-target.patch     patch OPN + AMB RC3 pada sumber
-│     ├── patch/upstream-ref.txt        versi OpenStint dikunci (v260830.1)
-│     ├── ATTRIBUTION.txt               atribusi GPL + sumber lengkap
-│     └── cara.ps1                      build manual di Windows
-└── vendor/openstint/                   hasil: YurLapsDecoder.exe + DLL
+1. membangun `librtlsdr` dari fork RTL-SDR Blog (perlu untuk dongle V4),
+2. membangun decoder dengan RTL-SDR dan ZeroMQ,
+3. menjalankan tes unit dan tes replay IQ sintetis,
+4. mengemas `YurLapsDecoder.exe` + DLL + lisensi ke artifact `yurlaps-decoder`,
+
+lalu job `build` mengunduhnya ke `vendor/decoder/` sebelum aplikasi dibangun.
+
+## Keluaran decoder (ZeroMQ `tcp://127.0.0.1:5556`, juga stdout)
+
+```text
+P <ts_ms> YUL <id> <rssi_dbfs> <hits> <duration_us> <mer_db>
+S <ts_ms> <noise_dbfs> <dc_offset> <frames_received> <frames_processed> <jitter_p95_ms>
 ```
 
-## Alur di CI
+Baris `H` (satu frame valid) hanya keluar dengan `--debug`.
 
-```
-job decoder  ──artifact "yurlaps-decoder"──►  job build
-  clone OpenStint v260830.1                    unduh ke vendor/openstint/
-  git apply patch                              PyInstaller membundel vendor/
-  cmake + ninja                                Electron membungkus semuanya
-  YurLapsDecoder.exe + DLL + ATTRIBUTION       YurLaps-Setup-0.3.0.exe
-  yurlaps-decoder-src.zip  (GPL-3.0)
-```
+## Argumen yang dipakai aplikasi
 
-Artifact `yurlaps-decoder` menyertakan **arsip sumber lengkap**
-(`yurlaps-decoder-src.zip`) supaya kewajiban GPL-3.0 terpenuhi. Repo boleh
-private karena sumber disebar bersama biner, bukan lewat repo.
+`-g <gain_db>`, `-d <serial>`, `-p <port>`, `-b` (bias tee), `-D` (direct
+sampling paksa), `--quiet`, `--debug`, `--record file.iq`,
+`--list-devices`, `--protocol-check` (mencetak `YURLAPS_YLP1=1`).
 
-## Di dalam paket aplikasi
+## Rekam IQ untuk analisis
 
-`vendor/openstint/` dibundel ke `_internal/vendor/openstint/` dan itulah lokasi
-yang dicari `app/decoder_manager.py`. Sudah diuji: setelah build, manager
-menemukan
-
-```
-_internal/vendor/openstint/YurLapsDecoder
-```
-
-Di Task Manager pengguna terlihat **`YurLapsDecoder.exe`**.
-
-## Build manual (tanpa CI)
-
-```powershell
-# prasyarat: MSYS2 (https://www.msys2.org/) + Git
-cd decoder
-powershell -ExecutionPolicy Bypass -File .\cara.ps1
-```
-
-Hasil: `decoder\out\YurLapsDecoder.exe` + DLL. Salin isinya ke
-`vendor\openstint\` lalu jalankan `python build_exe.bat` / PyInstaller seperti
-biasa, atau langsung `npm run dist` di folder `desktop`.
-
-## Mengunci / memperbarui versi OpenStint
-
-Ubah `decoder/patch/upstream-ref.txt` (mis. `v260830.1`). Semua build berikutnya
-memakai versi itu — hasilnya bisa direproduksi.
-
-Kalau patch perlu diperbarui (mis. upstream mengubah `src/CMakeLists.txt`),
-perbarui `decoder/patch/rename-target.patch` dan uji dengan `cara.ps1`.
-
-## Perhitungan passing
-
-Dari sumber `src/passing.cpp`, OpenStint
-menentukan titik lintasan sebagai:
-
-| Kondisi | Titik yang dipakai |
-|---|---|
-| hit < 16 | rata-rata berbobot RSSI (ambang `max − 6 dB`) |
-| transponder berhenti lama | titik saat kendaraan pergi |
-| ada 2 lembah RSSI | titik tengah antara dua lembah |
-| ada 2 puncak | titik tengah antara dua puncak |
-| selain itu | titik tengah antara persilangan `max − 6 dB` |
-
-Jadi sudah **bukan** "hit terakhir" — sudah pusat lintasan. Mengubahnya tanpa
-data ukur berisiko menurunkan akurasi. Kalau nanti terbukti ada bias, patch
-ditambahkan ke folder `patch/` yang sama.
+`YurLapsDecoder.exe -g 28 --debug --record capture.iq` lalu putar ulang dengan
+`YurLapsDecoder.exe --iq capture.iq --debug`.

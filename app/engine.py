@@ -1,6 +1,6 @@
 """Mesin waktu (timing engine) YurLaps.
 
-Aturan main (mirip perilaku lap counter OpenStint/LapBeeps untuk sesi latihan):
+Aturan main (lap counter untuk sesi latihan):
 
 * Setiap transponder punya "stint" sendiri.
 * Lintasan pertama setelah idle membuka stint baru dan menjadi titik nol
@@ -53,7 +53,7 @@ def fmt_ms_short(ms: Optional[int]) -> str:
 @dataclass
 class Passing:
     transponder_id: int
-    transponder_type: str = "OPN"
+    transponder_type: str = "YUL"
     rssi: Optional[float] = None
     hit_count: Optional[int] = None
     pass_duration_us: Optional[int] = None
@@ -158,7 +158,7 @@ class Stint:
 @dataclass
 class Driver:
     transponder_id: int
-    transponder_type: str = "OPN"
+    transponder_type: str = "YUL"
     driver: str = ""
     car: str = ""
     class_name: str = ""
@@ -266,7 +266,7 @@ class Engine:
             try:
                 d = Driver(
                     transponder_id=int(m.transponder_id),
-                    transponder_type=m.transponder_type or "OPN",
+                    transponder_type=m.transponder_type or "YUL",
                     driver=m.driver,
                     car=m.car,
                     class_name=m.class_name,
@@ -302,7 +302,7 @@ class Engine:
             st = Stint(
                 id=row["id"],
                 transponder_id=row["transponder_id"],
-                transponder_type=row.get("transponder_type") or "OPN",
+                transponder_type=row.get("transponder_type") or "YUL",
                 started_at=row["started_at"],
                 ended_at=row["ended_at"],
                 index=row.get("stint_index") or 1,
@@ -328,14 +328,14 @@ class Engine:
             self.on_event(ev)
 
     # -- driver ------------------------------------------------------------
-    def driver(self, transponder_id: int, transponder_type: str = "OPN") -> Driver:
+    def driver(self, transponder_id: int, transponder_type: str = "YUL") -> Driver:
         tid = int(transponder_id)
         d = self.drivers.get(tid)
         if d is None:
             m = self.cfg.mapping_for(tid)
             d = Driver(
                 transponder_id=tid,
-                transponder_type=transponder_type or "OPN",
+                transponder_type=transponder_type or "YUL",
                 driver=m.driver,
                 car=m.car,
                 class_name=m.class_name,
@@ -354,7 +354,7 @@ class Engine:
                 setattr(d, k, str(fields[k]))
         m = self.cfg.mapping_for(transponder_id)
         m.driver, m.car, m.class_name, m.note = d.driver, d.car, d.class_name, d.note
-        m.transponder_type = d.transponder_type or "OPN"
+        m.transponder_type = d.transponder_type or "YUL"
         self.cfg.save()
         self._persist_driver(d)
         self.version += 1
@@ -392,7 +392,7 @@ class Engine:
             self._emit("decoder", online=True)
 
     def on_timesync(self, parts: list[str]) -> None:
-        """Pesan 'T' (time sync) dari transponder OpenStint.
+        """Pesan 'T' (time sync) dari decoder.
 
         Berguna untuk sector timing multi-decoder; di YurLaps hanya dicatat
         sebagai bukti decoder hidup + jam acuannya.
@@ -410,7 +410,7 @@ class Engine:
         self.version += 1
 
     def decoder_status_message(self, parts: list[str]) -> None:
-        """Pesan 'S' dari OpenStint."""
+        """Pesan 'S' dari decoder."""
         self.decoder_seen()
         try:
             st = {
@@ -580,7 +580,7 @@ class Engine:
         st = Stint(
             id=next(self._stint_ids),
             transponder_id=d.transponder_id,
-            transponder_type=d.transponder_type or "OPN",
+            transponder_type=d.transponder_type or "YUL",
             started_at=wall_now,
             index=idx,
             session_id=self.session_id,

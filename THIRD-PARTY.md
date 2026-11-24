@@ -1,47 +1,23 @@
-# Komponen pihak ketiga & lisensi
+# Komponen pihak ketiga dan lisensi
 
-YurLaps sendiri berlisensi **MIT** (lihat `LICENSE`). YurLaps **tidak**
-mengandung kode sumber pihak ketiga dan **tidak memodifikasi** program pihak
-ketiga. Yang dipakai ada dua, dan keduanya berjalan sebagai **proses terpisah**
-atau **alat bantu terpisah**:
+StintLab/YurLaps memakai decoder native milik proyek ini. Tidak ada kode
+OpenStint di aplikasi ini.
 
-| Komponen | Pemilik | Lisensi | Cara YurLaps memakainya |
+| Komponen | Sumber | Lisensi | Penggunaan |
 |---|---|---|---|
-| **OpenStint** (`openstint_rtlsdr.exe` / `openstint_hackrf.exe`) | Zsolt Sellera — https://github.com/zsellera/openstint | GPL-3.0 | Dijalankan sebagai proses terpisah; YurLaps membaca pesan ZeroMQ yang memang didokumentasikan untuk integrasi pihak ketiga (`docs/decoder-protocol.md`). |
-| **Zadig / libwdi** (`zadig.exe`, `wdi-simple.exe`) | Pete Batard — https://github.com/pbatard/libwdi | GPL-3.0 | Dipanggil sebagai alat untuk memasang driver WinUSB pada dongle RTL-SDR. |
+| **YurLapsDecoder YLP-1** | `decoder/native/` | MIT proyek YurLaps | Decoder protokol transponder YurLaps, dipanggil sebagai proses terpisah. |
+| **librtlsdr** (fork RTL-SDR Blog, dukungan Blog V4) | https://github.com/rtlsdrblog/rtl-sdr-blog | GPL-2.0-or-later | Backend dongle RTL-SDR yang ditautkan ke decoder. |
+| **libusb** | https://libusb.info/ | LGPL-2.1-or-later | Akses USB RTL-SDR. |
+| **ZeroMQ / libzmq** | https://zeromq.org/ | MPL-2.0 | Kanal data decoder ke engine pada `tcp://127.0.0.1:5556`. |
+| **Zadig / libwdi** | https://github.com/pbatard/libwdi | GPL-3.0 | Alat terpisah untuk memasang driver WinUSB pada dongle, bila dibundel. |
 
-## Kenapa YurLaps tidak "terkena" GPL
+## Pemberitahuan distribusi
 
-GPL-3.0 berlaku untuk *program* dan *karya turunannya*. YurLaps:
+Workflow Windows membangun `YurLapsDecoder.exe` dari `decoder/native/` dan
+membawa `librtlsdr.dll` dari fork RTL-SDR Blog. Karena librtlsdr adalah GPL,
+paket rilis yang membawa DLL itu harus menyediakan teks lisensi dan akses ke
+sumber sesuai GPL. Pemberitahuan paket ada di `decoder/NOTICES.txt`; workflow
+juga menyalinnya ke artifact decoder.
 
-1. **tidak menyertakan kode** OpenStint/libwdi di dalam kode sumbernya;
-2. **tidak menautkan (link)** pustaka mereka — komunikasi hanya lewat socket
-   ZeroMQ pada `tcp://127.0.0.1:5556`, antarmuka yang didokumentasikan publik
-   justru untuk dipakai aplikasi lain;
-3. **tidak memodifikasi** biner mereka.
-
-Pola ini (program terpisah yang saling bicara lewat protokol terdokumentasi)
-umumnya dipandang sebagai *aggregation*, bukan karya turunan. Karena itu
-YurLaps boleh memakai lisensi MIT.
-
-## Kalau kamu mendistribusikan biner pihak ketiga
-
-Unduhan otomatis (default YurLaps) membuat **pengguna mengambil sendiri** dari
-rilis resmi GitHub — cara paling bersih. Tapi kalau kamu **membundel**
-`openstint_*.exe` atau `zadig.exe` ke dalam installer lalu menyebarkannya,
-GPL-3.0 mewajibkan kamu untuk:
-
-- menyertakan **teks lisensi GPL-3.0** untuk komponen tersebut;
-- menyertakan **URL sumber** (atau sumber lengkap) versi yang kamu sebarkan;
-- **menandai** kalau ada perubahan (YurLaps tidak mengubah apa pun);
-- tidak melarang penerima menyebarkan ulang komponen itu.
-
-Berkas `vendor/openstint/ATTRIBUTION.txt` dan `vendor/win/LICENSE-libwdi.txt`
-dibuat otomatis oleh `tools/fetch_vendor.py` untuk keperluan ini. Jangan hapus
-keduanya dari paket distribusi.
-
-## Kredit
-
-Terima kasih kepada Zsolt Sellera (OpenStint & LapBeeps) dan Pete Batard
-(libwdi/Zadig). Proyek YurLaps tidak berafiliasi dengan mereka dan tidak
-dimaksudkan sebagai pengganti atau tiruan produk mereka.
+Sumber native YurLaps dan draft protokol tersedia di repo ini. Aplikasi dan
+kode YurLaps lainnya memakai lisensi yang tercantum di `LICENSE`.

@@ -35,11 +35,12 @@ CHECKS = [
     ("desktop/src/main/updates.js", "prepare", "pembaruan menunggu penyimpanan"),
     ("desktop/src/preload/index.js", "contextBridge", "preload terisolasi"),
     ("tools/engine.spec", "app/static", "UI dibundel bersama mesin"),
-    ("tools/engine.spec", "vendor/openstint", "decoder ikut installer"),
+    ("tools/engine.spec", "vendor/decoder", "decoder ikut installer"),
     ("run_stintlab.py", '"--app-window"', "launcher menggunakan UI lengkap"),
-    (".github/workflows/build-windows.yml", "yurlaps-decoder-src.zip", "sumber decoder GPL ikut artifact"),
-    ("decoder/ATTRIBUTION.txt", "GPL-3.0", "atribusi decoder"),
-    ("vendor/openstint/ATTRIBUTION.txt", "yurlaps-decoder-src.zip", "atribusi terpasang bersama decoder"),
+    (".github/workflows/build-windows.yml", "decoder/native", "sumber decoder YLP-1 ikut build"),
+    ("decoder/NOTICES.txt", "librtlsdr", "atribusi decoder dan librtlsdr"),
+    ("decoder/native/src/main.cpp", "YURLAPS_YLP1=1", "decoder YLP-1"),
+    ("decoder/native/CMakeLists.txt", "YurLapsDecoder", "build native decoder"),
     ("app/static/assets/yurlaps-logo.png", None, "logo aplikasi"),
     ("assets/yurlaps.ico", None, "ikon installer"),
 ]
@@ -434,48 +435,21 @@ def check_single_workflow() -> bool:
     return ok
 
 
-def check_patch_lf() -> bool:
-    """Patch harus LF dan .gitattributes melindunginya.
-
-    Kegagalan nyata: di runner Windows (core.autocrlf=true) checkout menjadi
-    CRLF sehingga `git apply` menolak dengan "patch does not apply" dan setiap
-    baris konteks tampak diakhiri karakter aneh.
-    """
+def check_decoder_workflow() -> bool:
+    """Workflow harus membangun sumber native YLP-1 dan paketkan pemberitahuan."""
     ok = True
-    patch = ROOT / "decoder" / "patch" / "rename-target.patch"
-    if not patch.is_file():
-        print("  HILANG  decoder/patch/rename-target.patch")
-        return False
-    data = patch.read_bytes()
-    if b"\r" in data:
-        print("  GAGAL    rename-target.patch berisi CR (harus LF)")
-        ok = False
-    if not data.endswith(b"\n"):
-        print("  GAGAL    rename-target.patch tidak diakhiri baris baru")
-        ok = False
-
-    attr = ROOT / ".gitattributes"
-    if not attr.is_file():
-        print("  GAGAL    .gitattributes tidak ada (patch bisa berubah CRLF di Windows)")
-        ok = False
-    else:
-        teks = attr.read_text(encoding="utf-8", errors="replace")
-        if "*.patch" not in teks or "eol=lf" not in teks:
-            print("  GAGAL    .gitattributes tidak memaksa *.patch eol=lf")
-            ok = False
-
-    # workflow harus mematikan autocrlf + punya cadangan penggantian langsung
     wf = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(
         encoding="utf-8", errors="replace")
-    if "core.autocrlf false" not in wf:
-        print("  GAGAL    workflow tidak mematikan core.autocrlf sebelum clone")
+    for marker in ("decoder/native", "YURLAPS_YLP1=1", "vendor/decoder", "NOTICES.txt",
+                   "rtlsdrblog/rtl-sdr-blog"):
+        if marker not in wf:
+            print(f"  GAGAL    workflow tidak memuat {marker}")
+            ok = False
+    if any(marker in wf for marker in ("openstint", "liquid-dsp", "libfec", "decoder/patch")):
+        print("  GAGAL    workflow masih memuat decoder lama")
         ok = False
-    if "openstint_add_decoder(YurLapsDecoder" not in wf:
-        print("  GAGAL    workflow tidak punya cadangan penggantian nama target")
-        ok = False
-
     if ok:
-        print("  ok       patch LF + .gitattributes + workflow tahan CRLF")
+        print("  ok       workflow native YLP-1 + librtlsdr Blog")
     return ok
 
 
@@ -677,7 +651,7 @@ def main() -> int:
     ok = check_versions() and ok
     ok = check_workflow_tools() and ok
     ok = check_no_external_imports() and ok
-    ok = check_patch_lf() and ok
+    ok = check_decoder_workflow() and ok
     ok = check_single_workflow() and ok
     ok = check_data_update_rules() and ok
     ok = check_app_offline() and ok

@@ -2,7 +2,7 @@
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now stintlab
 [Unit]
-Description=StintLab lap timing (OpenStint)
+Description=StintLab lap timing (YurLapsDecoder)
 After=network-online.target
 Wants=network-online.target
 

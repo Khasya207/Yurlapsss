@@ -3,7 +3,7 @@
 Status: **rancangan (belum dikode)** · Tanggal: 2026-11-04 · Target: YurLaps Windows 10+
 
 Dokumen ini menjawab satu pertanyaan: bagaimana aplikasi Windows YurLaps bisa
-memakai akun website `yurlaps.dpdns.org` (club, member, transponder) dan
+memakai akun website `yurlaps-website.vercel.app` (club, member, transponder) dan
 mengunggah hasil balapan — **tanpa mengorbankan timing saat internet mati**.
 
 ---
@@ -863,7 +863,7 @@ Hasil uji Playwright (14 langkah, seluruhnya lulus):
 ### 14.7 Yang sengaja BELUM dikerjakan (menunggu tahap daring)
 
 - login akun & pemilihan club aktif,
-- unggah hasil ke `yurlaps.dpdns.org` (antrean sudah ada: `race.sync='belum'`),
+- unggah hasil ke `yurlaps-website.vercel.app` (antrean sudah ada: `race.sync='belum'`),
 - sinkron track ke website,
 - penarikan member dari server (sekarang data club dari SQLite lokal),
 - decoder sungguhan mengisi lap (tombol "Lintasan (simulasi)" hanya untuk uji UI).

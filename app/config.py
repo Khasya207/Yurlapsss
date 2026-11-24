@@ -72,7 +72,7 @@ class TransponderMapping:
     """Data personal sebuah transponder."""
 
     transponder_id: int
-    transponder_type: str = "OPN"
+    transponder_type: str = "YUL"
     driver: str = ""
     car: str = ""
     class_name: str = ""
@@ -100,7 +100,7 @@ class Config:
     decoder_devices: dict[str, dict] = field(default_factory=dict)  # serial -> gain, enabled
     decoder_use_system_clock: bool = False  # -t pakai jam sistem
     decoder_monitor: bool = False      # -m monitor mode (cetak frame)
-    decoder_auto_download: bool = False # hanya decoder OPN + AMB RC3 bawaan paket
+    decoder_auto_download: bool = False # hanya YurLapsDecoder bawaan paket
     decoder_restart_max_delay: int = 30  # detik, batas backoff restart
     decoder_idle_restart: int = 15     # detik tanpa data ZMQ -> restart decoder
 
@@ -221,7 +221,7 @@ class Config:
             try:
                 m = TransponderMapping(
                     transponder_id=int(val.get("transponder_id", key)),
-                    transponder_type=val.get("transponder_type", "OPN"),
+                    transponder_type=val.get("transponder_type", "YUL"),
                     driver=val.get("driver", ""),
                     car=val.get("car", ""),
                     class_name=val.get("class_name", ""),

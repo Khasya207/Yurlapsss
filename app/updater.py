@@ -45,7 +45,7 @@ IS_WINDOWS = os.name == "nt"
 # Boleh dikosongkan; pengguna bisa mengisi URL manifest sendiri di Setelan.
 # The website publishes a JSON manifest alongside the Electron `latest.yml`.
 # The Python engine consumes JSON (`version`, `url`, `sha256`, `size`).
-DEFAULT_MANIFEST_URL = "https://yurlaps.dpdns.org/releases/manifest.json"
+DEFAULT_MANIFEST_URL = "https://yurlaps-website.vercel.app/releases/manifest.json"
 
 
 # ---------------------------------------------------------------------------

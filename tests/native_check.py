@@ -40,10 +40,10 @@ def main() -> int:
     # ---- transponder lalu lintas (tanpa SDR: panggil mesin langsung)
     from app.engine import Passing
     eng = app.engine
-    eng.on_passing(Passing(transponder_id=1615544, transponder_type="OPN",
+    eng.on_passing(Passing(transponder_id=1615544, transponder_type="YUL",
                            rssi=-3.1, decoder_timecode=1000))
     time.sleep(0.02)
-    eng.on_passing(Passing(transponder_id=1615544, transponder_type="OPN",
+    eng.on_passing(Passing(transponder_id=1615544, transponder_type="YUL",
                            rssi=-3.0, decoder_timecode=9100))
     win.render_practice()
     check(len(win.tv_practice.get_children()) == 1,

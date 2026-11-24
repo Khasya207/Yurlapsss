@@ -24,7 +24,7 @@ hidden = collect_submodules("zmq") + [
 
 datas = [("app/static", "app/static")]
 # Komponen pihak ketiga opsional (lihat tools/fetch_vendor.py)
-for extra in ("vendor/win", "vendor/openstint"):
+for extra in ("vendor/win", "vendor/decoder"):
     if os.path.isdir(extra):
         datas.append((extra, extra))
 

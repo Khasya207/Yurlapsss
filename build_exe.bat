@@ -7,9 +7,9 @@ where python >nul 2>nul
 if errorlevel 1 goto failed
 where npm >nul 2>nul
 if errorlevel 1 goto failed
-if not exist vendor\openstint\YurLapsDecoder.exe (
+if not exist vendor\decoder\YurLapsDecoder.exe (
   echo Decoder belum tersedia. Ambil artifact yurlaps-decoder dari Actions
-  echo dan ekstrak decoder-out ke vendor\openstint, termasuk semua DLL.
+  echo dan ekstrak decoder-out ke vendor\decoder, termasuk semua DLL.
   echo Atau gunakan Actions - Build Windows untuk membangun semuanya.
   goto failed
 )
@@ -29,7 +29,7 @@ if errorlevel 1 goto node_failed
 call npm run dist
 if errorlevel 1 goto node_failed
 popd
-echo Selesai. Installer ada di dist-electron\YurLaps-Setup-0.4.1.exe
+echo Selesai. Installer ada di dist-electron\YurLaps-Setup.exe
 pause
 exit /b 0
 

@@ -107,11 +107,11 @@ def list_sdr_devices(vid: str = "0x0bda", pid: str = "0x2838") -> list[dict]:
     # same library for EEPROM serials before relying on Windows PnP IDs, which
     # may change when the dongle's product descriptors are customized.
     if IS_WINDOWS:
-        roots = [app_root() / "vendor" / "openstint",
-                 app_root() / "_internal" / "vendor" / "openstint"]
+        roots = [app_root() / "vendor" / "decoder",
+                 app_root() / "_internal" / "vendor" / "decoder"]
         base = getattr(sys, "_MEIPASS", None)
         if base:
-            roots.insert(0, Path(base) / "vendor" / "openstint")
+            roots.insert(0, Path(base) / "vendor" / "decoder")
         for root in roots:
             exe = root / "YurLapsDecoder.exe"
             if not exe.is_file():
@@ -136,8 +136,8 @@ def list_sdr_devices(vid: str = "0x0bda", pid: str = "0x2838") -> list[dict]:
     candidates = []
     base = getattr(sys, "_MEIPASS", None)
     for root in filter(None, [Path(base) if base else None,
-                              app_root(), app_root() / "vendor" / "openstint",
-                              app_root() / "_internal" / "vendor" / "openstint"]):
+                              app_root(), app_root() / "vendor" / "decoder",
+                              app_root() / "_internal" / "vendor" / "decoder"]):
         for name in ("librtlsdr.dll", "rtlsdr.dll", "librtlsdr.so", "librtlsdr.dylib"):
             candidates.append(str(root / name))
     lib_name = ctypes.util.find_library("rtlsdr")

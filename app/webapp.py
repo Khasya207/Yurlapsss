@@ -628,7 +628,7 @@ def make_handler(ctx: AppContext):
                                   {"Content-Disposition": f'attachment; filename="{name}"'})
 
             if path == "/api/decoder/stats":
-                # Diagnostik mentah dari protokol OpenStint (untuk panel Decoder)
+                # Diagnostik mentah dari protokol YurLapsDecoder (untuk panel Decoder)
                 snap = engine.snapshot()["decoder"]
                 snap["ok"] = True
                 snap["decoder_binary"] = ctx.cfg.decoder_name
@@ -1266,7 +1266,7 @@ def make_handler(ctx: AppContext):
                                    "gain": cfg.decoder_gain})
 
             if path == "/api/decoder/gain":
-                # Ubah gain tuner -> simpan -> restart openstint.exe (debounce).
+                # Ubah gain tuner -> simpan -> restart YurLapsDecoder.exe (debounce).
                 try:
                     gain = float(data.get("gain"))
                 except (TypeError, ValueError):

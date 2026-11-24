@@ -5,15 +5,15 @@
 Menu Decoder mengambil data asli dari `/api/state`, bukan log simulasi di browser.
 Log tetap menampilkan ID yang belum menjadi member/peserta, dengan nama kosong atau
 "Belum terdaftar". Kolom: ID, nama, RSSI (dB), hit count, passing duration (µs),
-dan timestamp decoder (ms). Noise diambil dari pesan `S`; proses OpenStint yang
+dan timestamp decoder (ms). Noise diambil dari pesan `S`; proses YurLapsDecoder yang
 berjalan dibedakan dari aliran data yang benar-benar diterima. Gain/restart dikunci
 selama countdown/race karena restart mengubah epoch timestamp decoder.
 
-Protokol rujukan: [OpenStint v260830.1](https://github.com/zsellera/openstint/blob/v260830.1/docs/decoder-protocol.md).
+Protokol rujukan: [YurLapsDecoder v260830.1](https://github.com/zsellera/YurLapsDecoder/blob/v260830.1/docs/decoder-protocol.md).
 
 ## Waktu race
 
-- Semua lap dan urutan hasil memakai timestamp `P` OpenStint. Tidak ada fallback
+- Semua lap dan urutan hasil memakai timestamp `P` YurLapsDecoder. Tidak ada fallback
   ke jam kedatangan pesan di komputer.
 - Grid: GO memakai jam decoder terakhir yang diterima, maksimal berumur 3 detik.
   Ini adalah anchor status/passing terbaru, bukan sinyal GO yang disinkronkan ke
@@ -67,7 +67,7 @@ nantinya disediakan website. Tidak ada permintaan jaringan atau sinkron otomatis
 
 ID sumber diarsipkan dengan prefix `web-` agar tidak berbenturan dengan ID lokal.
 Impor bersifat transaksional: konflik satu baris membatalkan seluruh impor.
-Member impor tetap bisa diedit manual. Kontrak API live yurlaps.dpdns.org belum
+Member impor tetap bisa diedit manual. Kontrak API live yurlaps-website.vercel.app belum
 tersedia/terverifikasi; tombol impor ini memakai berkas JSON lokal.
 
 ## Laporan

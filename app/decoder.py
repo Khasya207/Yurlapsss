@@ -1,9 +1,8 @@
-"""Subscriber ZeroMQ untuk decoder OpenStint (satu-satunya sumber data lap).
+"""Subscriber ZeroMQ untuk YurLapsDecoder (satu-satunya sumber data lap).
 
-Protokol (lihat docs/decoder-protocol.md di repo zsellera/openstint):
+Keluaran decoder (lihat decoder/README.md dan decoder/docs/):
 
-    P <ts_ms> <type OPN|AMB> <id> <rssi> <hit_count> <pass_duration_us> <mer>
-    T <ts_ms> <type> <id> <transponder_timecode>
+    P <ts_ms> YUL <id> <rssi_dbfs> <hits> <pass_duration_us> <mer_db>
     S <ts_ms> <noise_power> <dc_offset> <frames_received> <frames_processed> <jitter_p95_ms>
 
 Pesan dipisah spasi dan bertipe posisional, jadi parsing dibuat defensif
@@ -27,7 +26,7 @@ class DecoderClient(threading.Thread):
         self.engine = engine
         self.endpoint = endpoint
         self.poll_ms = poll_ms
-        # OpenStint may finish estimating a later crossing first. Collect a
+        # The decoder may finish estimating a later crossing first. Collect a
         # short burst before dispatching by the decoder clock.
         self.reorder_window = max(0.0, float(reorder_ms) / 1000.0)
         self.max_reorder_window = max(self.reorder_window,
@@ -139,7 +138,7 @@ class DecoderClient(threading.Thread):
                 if len(parts) < 7:
                     self.rx_counts["bad"] += 1
                     return
-                if parts[2] not in ("OPN", "AMB"):
+                if parts[2] != "YUL":
                     return
                 self.rx_counts["P"] += 1
                 p = Passing(
@@ -177,11 +176,9 @@ class DecoderClient(threading.Thread):
                 self.rx_counts["S"] += 1
                 self.engine.decoder_status_message(parts)
             elif kind == "T":
+                # YLP-1 tidak punya pesan time sync; abaikan jika ada.
                 self._flush_pending()
-                if len(parts) < 3 or parts[2] != "OPN":
-                    return
-                self.rx_counts["T"] += 1
-                self.engine.on_timesync(parts)
+                return
             elif kind == "L":
                 return
             else:
@@ -239,7 +236,7 @@ def _f(parts: list[str], idx: int) -> Optional[float]:
 def parse_passing(msg: str) -> Optional[Passing]:
     """Helper untuk tes/utilitas."""
     parts = msg.split()
-    if len(parts) < 4 or parts[0] != "P" or parts[2] not in ("OPN", "AMB"):
+    if len(parts) < 4 or parts[0] != "P" or parts[2] != "YUL":
         return None
     try:
         timestamp = int(parts[1])

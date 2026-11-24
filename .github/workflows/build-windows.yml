@@ -73,9 +73,7 @@ jobs:
           YURLAPS_DATA: ${{ runner.temp }}/yl-man
 
   # ---------------------------------------------------------------------------
-  # 2. Decoder YurLaps: dibangun dari sumber OpenStint (GPL-3.0), patch
-  #    OPN + AMB RC3 lama. Hasilnya dipakai job "build" di bawah, jadi satu repo
-  #    menghasilkan aplikasi + decoder sekaligus.
+  # 2. YurLapsDecoder YLP-1: dibangun dari decoder/native (tanpa OpenStint).
   # ---------------------------------------------------------------------------
   decoder:
     needs: test
@@ -84,166 +82,73 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Setup MSYS2 (MINGW64)
+      - name: Setup MSYS2 UCRT64
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
-          suppress-deprecation-warnings: msystem-mingw64
+          msystem: UCRT64
+          suppress-deprecation-warnings: msystem-ucrt64
           update: false
           cache: true
           install: >-
-            mingw-w64-x86_64-toolchain
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-zeromq
-            mingw-w64-x86_64-cppzmq
-            mingw-w64-x86_64-libusb
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-zeromq
+            mingw-w64-ucrt-x86_64-cppzmq
+            mingw-w64-ucrt-x86_64-libusb
             git
-            make
-            autoconf
-            automake
-            libtool
-            pkg-config
             zip
-
-      - name: Ambil sumber OpenStint + patch YurLaps
+      - name: Build librtlsdr Blog V4
         shell: msys2 {0}
         run: |
           set -eu
-          # Runner Windows memakai core.autocrlf=true -> berkas checkout menjadi
-          # CRLF, dan setiap baris konteks patch LF tidak lagi cocok
-          # ("patch does not apply"). Paksa LF untuk semua berkas teks.
           git config --global core.autocrlf false
-          git config --global core.eol lf
-          REF="$(tr -d '[:space:]' < decoder/patch/upstream-ref.txt)"
-          echo "OpenStint versi: $REF"
-          rm -rf upstream
-          git clone --depth 1 --branch "$REF" \
-            -c core.autocrlf=false -c core.eol=lf \
-            https://github.com/zsellera/openstint.git upstream
-          cd upstream
-          git rev-parse HEAD | tee ../upstream-commit.txt
-
-          # Patch hanya menyisakan OPN dan AMB RC3 lama; RC4 tetap mati.
-          git apply --check ../decoder/patch/rename-target.patch
-          git apply ../decoder/patch/rename-target.patch
-          grep -q 'openstint_add_decoder(YurLapsDecoder main_rtlsdr.cpp' src/CMakeLists.txt
-          ! grep -q 'rc4.cpp' src/CMakeLists.txt
-          grep -q 'match_preamble(p_rc3)' src/frame.cpp
-          ! grep -q 'match_preamble(p_rc4)' src/frame.cpp
-          grep -q 'decode_rc3' src/commons.cpp
-          ! grep -q 'rc4_trainer\|rc4_registry\|decode_vostok' src/commons.cpp
-          echo "OK: YurLapsDecoder mendeteksi OPN dan AMB RC3 lama"
-
-      - name: Build liquid-dsp
+          rm -rf rtl-sdr-blog rtlsdr-blog-prefix
+          git clone --depth 1 https://github.com/rtlsdrblog/rtl-sdr-blog.git rtl-sdr-blog
+          cmake -S rtl-sdr-blog -B rtl-sdr-blog/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-std=gnu11 \
+            -DINSTALL_UDEV_RULES=OFF -DCMAKE_INSTALL_PREFIX="$PWD/rtlsdr-blog-prefix"
+          cmake --build rtl-sdr-blog/build --parallel 2
+          cmake --install rtl-sdr-blog/build
+          test -f rtlsdr-blog-prefix/include/rtl-sdr.h
+      - name: Build and test YurLapsDecoder
         shell: msys2 {0}
         run: |
           set -eu
-          rm -rf liquid-dsp
-          git -c advice.detachedHead=false clone --depth 1 --branch v1.7.0 \
-            https://github.com/jgaeddert/liquid-dsp.git liquid-dsp
-          cd liquid-dsp
-          # scripts/version.sh tidak mengembalikan versi dari CMake di Windows.
-          # Tag yang dikloning di atas adalah v1.7.0.
-          sed -i '/^project(liquid VERSION/i set(LIQUID_VERSION 1.7.0)' CMakeLists.txt
-          sed -i 's/add_library(${LIBNAME} SHARED/add_library(${LIBNAME} STATIC/' CMakeLists.txt
-          sed -i '/^target_link_libraries(${LIBNAME} c m)$/d' CMakeLists.txt
-          grep -Fq 'set(LIQUID_VERSION 1.7.0)' CMakeLists.txt
-          grep -Fq 'add_library(${LIBNAME} STATIC' CMakeLists.txt
-          cmake -S . -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_EXAMPLES=OFF \
-            -DBUILD_AUTOTESTS=OFF \
-            -DBUILD_BENCHMARKS=OFF \
-            -DENABLE_SIMD=OFF
-          cmake --build build --parallel 2
-          install -Dm644 build/libliquid.a /mingw64/lib/libliquid.a
-          install -Dm644 include/liquid.h /mingw64/include/liquid/liquid.h
-          test -f /mingw64/include/liquid/liquid.h
-          test -f /mingw64/lib/libliquid.a
-
-      - name: Install libfec
+          cmake -S decoder/native -B decoder/native/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DYURLAPS_WITH_RTLSDR=ON -DYURLAPS_WITH_ZMQ=ON \
+            -DCMAKE_PREFIX_PATH="$PWD/rtlsdr-blog-prefix;/ucrt64"
+          cmake --build decoder/native/build --parallel 2
+          ctest --test-dir decoder/native/build --output-on-failure
+          decoder/native/build/YurLapsDecoder.exe --protocol-check | grep -q 'YURLAPS_YLP1=1'
+      - name: Package decoder and licenses
         shell: msys2 {0}
         run: |
           set -eu
-          git clone --depth 1 https://github.com/quiet/libfec.git
-          cd libfec
-          ./configure --prefix=/mingw64
-          sed -i 's/-lc$//' Makefile
-          sed -i 's/libfec\.so/libfec.dll/' Makefile
-          make
-          cp libfec.dll libfec.a /mingw64/lib
-          cp fec.h /mingw64/include
-
-      - name: Build YurLapsDecoder.exe
-        shell: msys2 {0}
-        run: |
-          set -eu
-          cd upstream
-          cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_HACKRF=OFF -DUSE_RTLSDR=ON -B build .
-          ninja -C build
-          cmake --install build --prefix "$PWD/staging"
-
-      - name: Kumpulkan biner + DLL + atribusi
-        shell: msys2 {0}
-        run: |
-          set -eu
-          cd upstream
-          mkdir -p ../decoder-out
-          cp staging/bin/YurLapsDecoder.exe ../decoder-out/
-          find staging -type f -iname '*.dll' -exec cp '{}' ../decoder-out/ \;
-          cp /mingw64/lib/libfec.dll ../decoder-out/
-          # Paket MSYS2 memberi beberapa DLL dengan suffix ABI/version
-          # (contoh: libsodium-26.dll), jadi jangan mencari nama exact.
-          copy_dll() {
-            pattern="$1"
-            matches=(/mingw64/bin/$pattern)
-            if [ ! -e "${matches[0]}" ]; then
-              echo "GAGAL: DLL tidak ditemukan: $pattern"; exit 1
-            fi
-            cp "${matches[@]}" ../decoder-out/
-          }
+          out="$PWD/decoder-out"; mkdir -p "$out"
+          cp decoder/native/build/YurLapsDecoder.exe "$out/"
+          cp decoder/NOTICES.txt "$out/"
+          copy_dll() { matches=(/ucrt64/bin/$1); test -e "${matches[0]}" || { echo "missing DLL $1"; exit 1; }; cp "${matches[@]}" "$out/"; }
+          copy_dll 'librtlsdr*.dll'
+          copy_dll 'libusb-1.0*.dll'
           copy_dll 'libzmq*.dll'
           copy_dll 'libsodium*.dll'
-          copy_dll 'libusb-1.0*.dll'
           copy_dll 'libgcc_s_seh-1.dll'
           copy_dll 'libstdc++-6.dll'
           copy_dll 'libwinpthread-1.dll'
-          cp "$GITHUB_WORKSPACE/decoder/ATTRIBUTION.txt" ../decoder-out/
-          echo "isi paket decoder:"; ls -la ../decoder-out
-
-      - name: Uji decoder bisa dijalankan
+          copy_dll 'libgcc_s_ucrt-1.dll'
+      - name: Test packaged decoder
         shell: pwsh
         run: |
-          Set-Location decoder-out
-          # Test exactly the packaged DLLs, without MSYS2 satisfying omissions.
           $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          $protocol = (& .\YurLapsDecoder.exe --protocol-check 2>&1 | Out-String)
-          if ($LASTEXITCODE -ne 0 -or $protocol -notmatch 'YURLAPS_OPN_AMB_RC3=1') {
-            throw "Decoder paket bukan build OPN dan AMB RC3: $protocol"
-          }
-          $output = (& .\YurLapsDecoder.exe --salah 2>&1 | Out-String)
-          if ($output -notmatch 'Usage') {
-            throw "Decoder paket gagal dijalankan: $output"
-          }
-          Write-Host "OK: decoder berjalan tanpa DLL dari MSYS2"
-          exit 0
-
-      - name: Simpan decoder + sumber (kepatuhan GPL-3.0)
-        shell: msys2 {0}
-        run: |
-          set -eu
-          cd upstream && rm -rf build staging .git && cd ..
-          zip -qr yurlaps-decoder-src.zip upstream liquid-dsp/LICENSE
-
+          $protocol = (& decoder-out/YurLapsDecoder.exe --protocol-check | Out-String)
+          if ($LASTEXITCODE -ne 0 -or $protocol -notmatch 'YURLAPS_YLP1=1') { throw "YurLapsDecoder package failed: $protocol" }
+          if (-not (Test-Path decoder-out/NOTICES.txt)) { throw "NOTICES.txt missing" }
       - uses: actions/upload-artifact@v7
         with:
           name: yurlaps-decoder
           retention-days: 1
-          path: |
-            decoder-out/*
-            yurlaps-decoder-src.zip
-            upstream-commit.txt
+          path: decoder-out/*
           if-no-files-found: error
 
   # ---------------------------------------------------------------------------
@@ -301,26 +206,23 @@ jobs:
         run: pip install -r requirements.txt pyinstaller
 
       # Decoder dibangun di job "decoder" pada workflow ini juga (satu repo),
-      # lalu diunduh ke vendor/openstint sebelum aplikasi dibangun.
+      # lalu diunduh ke vendor/decoder sebelum aplikasi dibangun.
       - name: Unduh decoder hasil job decoder
         uses: actions/download-artifact@v5
         with:
           name: yurlaps-decoder
-          path: ${{ steps.detect.outputs.root }}/vendor/openstint
+          path: ${{ steps.detect.outputs.root }}/vendor/decoder
 
       - name: Pastikan decoder siap dipakai
         working-directory: ${{ steps.detect.outputs.root }}
         shell: pwsh
         run: |
           # upload-artifact preserves decoder-out/ beside the source archive.
-          if (Test-Path "vendor\openstint\decoder-out") {
-            Move-Item vendor\openstint\decoder-out\* vendor\openstint\ -Force
-          }
-          $exe = Get-ChildItem vendor\openstint -Filter "YurLapsDecoder*" -ErrorAction SilentlyContinue
+          $exe = Get-ChildItem vendor\decoder -Filter "YurLapsDecoder*" -ErrorAction SilentlyContinue
           if ($exe) {
             Write-Host "OK: memakai decoder YurLaps ($($exe[0].Name))"
-            if (-not (Test-Path "vendor\openstint\ATTRIBUTION.txt")) {
-              throw "ATTRIBUTION.txt tidak ada: atribusi GPL-3.0 wajib ikut"
+            if (-not (Test-Path "vendor\decoder\NOTICES.txt")) {
+              throw "NOTICES.txt tidak ada: atribusi GPL wajib ikut"
             }
           } else {
             throw "YurLapsDecoder.exe tidak ada di paket decoder"
@@ -461,7 +363,7 @@ jobs:
             ${{ steps.detect.outputs.root }}/dist-electron/*.yml
             ${{ steps.detect.outputs.root }}/dist/*-full.exe
             ${{ steps.detect.outputs.root }}/dist/*.json
-            ${{ steps.detect.outputs.root }}/vendor/openstint/yurlaps-decoder-src.zip
-            ${{ steps.detect.outputs.root }}/vendor/openstint/upstream-commit.txt
+            ${{ steps.detect.outputs.root }}/vendor/decoder/yurlaps-decoder-src.zip
+            ${{ steps.detect.outputs.root }}/vendor/decoder/upstream-commit.txt
           if-no-files-found: error
 

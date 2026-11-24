@@ -8,7 +8,7 @@ Perilaku yang diinginkan (dan diimplementasikan di sini):
 * Kalau decoder mati (YurLaps Decoder terputus, crash, USB reset), percobaan
   berikutnya dilakukan setelah 5 detik; pemasangan USB membangunkan supervisor.
 * Proses yang masih hidup tidak di-restart hanya karena belum ada passing.
-* Biner yang dijalankan harus menandai diri sebagai build OPN + AMB RC3 YurLaps.
+* Biner yang dijalankan harus menandai diri sebagai YurLapsDecoder YLP-1 (`--protocol-check`).
 * Status lengkap (proses hidup? berapa kali restart? kenapa gagal?) tersedia
   untuk UI lewat `status()`.
 """
@@ -32,8 +32,7 @@ IS_WINDOWS = os.name == "nt"
 
 # Nama file yang kita cari setelah ekstrak (rilis resmi memakai .exe; build
 # Linux tanpa ekstensi).
-# YurLapsDecoder = biner hasil build kita dari sumber OpenStint (GPL-3.0).
-# Biner lama tidak boleh otomatis dijalankan karena masih mendukung RC4.
+# YurLapsDecoder = biner hasil build dari decoder/native (protokol YLP-1).
 EXE_NAMES = ("YurLapsDecoder.exe", "YurLapsDecoder")
 RETRY_SECONDS = 5.0
 
@@ -42,8 +41,7 @@ def public_decoder_log(line: str) -> str:
     """Keep decoder diagnostics while presenting the YurLaps device name."""
     for old, new in (("RTL-SDR Blog V4", "YurLaps Decoder"),
                      ("RTL-SDR", "YurLaps Decoder"),
-                     ("OpenStint", "YurLaps Decoder"),
-                     ("openstint", "YurLaps Decoder")):
+                     ):
         line = line.replace(old, new)
     return line
 
@@ -185,13 +183,13 @@ class DecoderManager(threading.Thread):
         """
         cands: list[Path] = []
         root = app_root()
-        cands.append(root / "vendor" / "openstint")
+        cands.append(root / "vendor" / "decoder")
         meipass = getattr(sys, "_MEIPASS", None)
         if meipass:
-            cands.append(Path(meipass) / "vendor" / "openstint")
-        cands.append(root / "_internal" / "vendor" / "openstint")
+            cands.append(Path(meipass) / "vendor" / "decoder")
+        cands.append(root / "_internal" / "vendor" / "decoder")
         # hasil build PyInstaller (mesin Electron) saat dijalankan dari repo
-        cands.append(root / "engine" / "_internal" / "vendor" / "openstint")
+        cands.append(root / "engine" / "_internal" / "vendor" / "decoder")
         cands.append(self.bin_dir())
         seen, out = set(), []
         for c in cands:
@@ -258,11 +256,11 @@ class DecoderManager(threading.Thread):
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    stdin=subprocess.DEVNULL, cwd=str(exe.parent),
                                    timeout=5, creationflags=0x08000000 if IS_WINDOWS else 0)
-            if check.returncode != 0 or b"YURLAPS_OPN_AMB_RC3=1" not in check.stdout:
-                raise RuntimeError("Biner decoder belum mendukung OPN dan AMB RC3")
+            if check.returncode != 0 or b"YURLAPS_YLP1=1" not in check.stdout:
+                raise RuntimeError("Biner decoder bukan YurLapsDecoder YLP-1")
         except Exception as exc:
             self._publish(state="error", running=False, last_error=str(exc),
-                          message="Decoder perlu dibangun ulang dengan patch OPN dan AMB RC3.")
+                          message="Pasang ulang aplikasi: decoder harus YurLapsDecoder YLP-1.")
             return False
         try:
             args = self.cfg.effective_decoder_args()
@@ -328,13 +326,13 @@ class DecoderManager(threading.Thread):
         """Proses decoder hidup tapi belum/tidak lagi membuka perangkatnya.
 
         Dipakai untuk mempercepat percobaan ulang: kalau perangkat terputus,
-        openstint akan mengeluh "no supported devices" dan tetap hidup tanpa
-        data. Tanda paling andal: tidak ada baris radio (freq) dan tidak ada
-        data ZMQ, plus log terakhir memuat keluhan perangkat.
+        YurLapsDecoder dapat tetap hidup tanpa data saat dongle belum ada.
+        Tanda paling andal: tidak ada baris radio (freq) dan tidak ada data
+        ZMQ, plus log terakhir memuat keluhan perangkat.
         """
         # USB presence probing is only advisory. Windows driver stacks can
-        # report no device even while OpenStint can open the RTL-SDR. Let the
-        # decoder try first; its own log/error remains the authoritative test.
+        # report no device even while YurLapsDecoder can open the RTL-SDR. Let
+        # the decoder try first; its own log/error remains authoritative.
         if self.engine.decoder_online:
             return False        # ada data ZMQ = perangkat pasti sudah terbuka
         if self.status.freq_hz:
@@ -421,7 +419,7 @@ class DecoderManager(threading.Thread):
             exe = self.find_decoder()
 
             if exe is None:
-                hint = "Pasang paket aplikasi yang menyertakan YurLapsDecoder OPN dan AMB RC3."
+                hint = "Pasang paket aplikasi yang menyertakan YurLapsDecoder."
                 self._publish(state="error", running=False,
                               message="Decoder belum tersedia. " + hint)
                 self._wait(RETRY_SECONDS)
@@ -501,15 +499,15 @@ class DecoderManager(threading.Thread):
         exe = self.find_decoder()
         if exe is None:
             return {"ok": False, "available": False,
-                    "message": "Biner YurLapsDecoder OPN dan AMB RC3 belum ada di paket aplikasi.",
+                    "message": "Biner YurLapsDecoder belum ada di paket aplikasi.",
                     "output": ""}
         try:
             check = subprocess.run(command_for(exe) + ["--protocol-check"],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    stdin=subprocess.DEVNULL, cwd=str(exe.parent),
                                    timeout=5, creationflags=0x08000000 if IS_WINDOWS else 0)
-            if check.returncode != 0 or b"YURLAPS_OPN_AMB_RC3=1" not in check.stdout:
-                return {"ok": False, "message": "Biner decoder bukan build OPN dan AMB RC3.",
+            if check.returncode != 0 or b"YURLAPS_YLP1=1" not in check.stdout:
+                return {"ok": False, "message": "Biner decoder bukan YurLapsDecoder YLP-1.",
                         "output": ""}
         except Exception as exc:
             return {"ok": False, "message": f"Pemeriksaan decoder gagal: {exc}",
