@@ -111,16 +111,27 @@ jobs:
           cmake --build rtl-sdr-blog/build --parallel 2
           cmake --install rtl-sdr-blog/build
           test -f rtlsdr-blog-prefix/include/rtl-sdr.h
+          test -f rtlsdr-blog-prefix/lib/librtlsdr.dll.a
+          find rtlsdr-blog-prefix -maxdepth 3 -type f -print
       - name: Build and test YurLapsDecoder
         shell: msys2 {0}
         run: |
           set -eu
+          RTL_PREFIX="$PWD/rtlsdr-blog-prefix"
           cmake -S decoder/native -B decoder/native/build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DYURLAPS_WITH_RTLSDR=ON -DYURLAPS_WITH_ZMQ=ON \
-            -DCMAKE_PREFIX_PATH="$PWD/rtlsdr-blog-prefix;/ucrt64"
+            -DRTLSDR_INCLUDE_DIR="$RTL_PREFIX/include" \
+            -DRTLSDR_LIBRARY="$RTL_PREFIX/lib/librtlsdr.dll.a" \
+            -DZMQ_INCLUDE_DIR=/ucrt64/include \
+            -DZMQ_LIBRARY=/ucrt64/lib/libzmq.dll.a
+          test -f decoder/native/build/CMakeCache.txt
+          grep -Fq "RTLSDR_INCLUDE_DIR:PATH=$RTL_PREFIX/include" decoder/native/build/CMakeCache.txt
+          grep -Fq "RTLSDR_LIBRARY:FILEPATH=$RTL_PREFIX/lib/librtlsdr.dll.a" decoder/native/build/CMakeCache.txt
           cmake --build decoder/native/build --parallel 2
           ctest --test-dir decoder/native/build --output-on-failure
           decoder/native/build/YurLapsDecoder.exe --protocol-check | grep -q 'YURLAPS_YLP1=1'
+          exit 0
+          # The packaged decoder is checked in the next step.
       - name: Package decoder and licenses
         shell: msys2 {0}
         run: |
@@ -128,8 +139,10 @@ jobs:
           out="$PWD/decoder-out"; mkdir -p "$out"
           cp decoder/native/build/YurLapsDecoder.exe "$out/"
           cp decoder/NOTICES.txt "$out/"
+          rtl_matches=(rtlsdr-blog-prefix/bin/librtlsdr*.dll)
+          test -e "${rtl_matches[0]}" || { echo "missing custom librtlsdr DLL"; exit 1; }
+          cp "${rtl_matches[@]}" "$out/"
           copy_dll() { matches=(/ucrt64/bin/$1); test -e "${matches[0]}" || { echo "missing DLL $1"; exit 1; }; cp "${matches[@]}" "$out/"; }
-          copy_dll 'librtlsdr*.dll'
           copy_dll 'libusb-1.0*.dll'
           copy_dll 'libzmq*.dll'
           copy_dll 'libsodium*.dll'
