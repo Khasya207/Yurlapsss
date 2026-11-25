@@ -67,7 +67,7 @@ Backup `%APPDATA%\YurLaps` sebelum uji update. Data SQLite lokal memakai migrasi
 DPAPI. Installer tidak boleh menghapus folder data untuk melakukan update.
 
 Migration server tambahan:
-`final-website/supabase/migrations/20261107180000_production_timing_contract.sql`.
+`repo Yurlaps website: supabase/migrations/20261107180000_production_timing_contract.sql`.
 Migration ini harus ditinjau dan diterapkan pada proyek Supabase yang digunakan;
 file source tidak berarti SQL sudah diterapkan. Jangan mereset database lama.
 

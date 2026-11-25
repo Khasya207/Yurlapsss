@@ -82,7 +82,7 @@ dibuka; SQL server dikelola terpisah.
 
 Website dan Supabase harus diperbarui bersama agar kontrak sinkronisasi cocok.
 Migration tambahan:
-`final-website/supabase/migrations/20261107180000_production_timing_contract.sql`.
+`repo Yurlaps website: supabase/migrations/20261107180000_production_timing_contract.sql`.
 File tersebut harus diterapkan pada proyek Supabase yang digunakan; keberadaan
 file dalam paket tidak berarti migration sudah dijalankan di server.
 

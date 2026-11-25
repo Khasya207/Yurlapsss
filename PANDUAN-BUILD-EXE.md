@@ -39,7 +39,7 @@ Jalur `stintlab.spec` adalah fallback developer dan bukan installer utama.
 
 1. Deploy website terbaru dan migration Supabase yang belum diterapkan. Patch
    kontrak terbaru adalah
-   `final-website/supabase/migrations/20261107180000_production_timing_contract.sql`.
+   `repo Yurlaps website: supabase/migrations/20261107180000_production_timing_contract.sql`.
    Ini perubahan tambahan pada schema lama; bukan perintah menghapus database.
 2. Pastikan bucket release dan proxy `/releases/` website sudah dikonfigurasi
    sesuai `DEPLOY-UPDATE-WEBSITE.md`.
