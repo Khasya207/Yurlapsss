@@ -132,8 +132,16 @@ jobs:
           test ${PIPESTATUS[0]} -eq 0
           test -s decoder/native/build/YurLapsDecoder.exe
           ctest --test-dir decoder/native/build --output-on-failure
-          decoder/native/build/YurLapsDecoder.exe --protocol-check | grep -q 'YURLAPS_YLP1=1'
-          exit 0
+          # The freshly built executable loads librtlsdr before main() runs.
+          # During this build-stage check the custom DLL is still outside
+          # /ucrt64/bin, so expose its prefix explicitly.
+          export PATH="$RTL_PREFIX/bin:/ucrt64/bin:$PATH"
+          protocol="$(decoder/native/build/YurLapsDecoder.exe --protocol-check)" || {
+            rc=$?
+            echo "protocol-check failed (exit $rc): $protocol"
+            exit $rc
+          }
+          test "$protocol" = "YURLAPS_YLP1=1"
       - name: Package decoder and licenses
         shell: msys2 {0}
         run: |
