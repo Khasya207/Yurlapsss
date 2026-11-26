@@ -13,7 +13,7 @@ from pathlib import Path
 
 APP_NAME = "YurLaps"
 LEGACY_APP_NAME = "StintLab"   # folder data lama (0.2.x) → dimigrasikan otomatis
-APP_VERSION = "0.5.8"
+APP_VERSION = "0.5.9"
 
 
 def default_data_dir() -> Path:
@@ -136,6 +136,7 @@ class Config:
     announce_best_lap_every: int = 3
     announce_last_lap: bool = False
     announce_finish: bool = True
+    announce_practice_lap: bool = True
     tts_rate: float = 1.0
     tts_voice: str = ""
     tts_language: str = "id-ID"

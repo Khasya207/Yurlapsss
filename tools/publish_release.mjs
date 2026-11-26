@@ -31,10 +31,18 @@ async function githubUpload(name, data) {
   if (!release.ok) throw new Error(`GitHub release ${tag} not found; create the release/tag first`)
   const releaseData = await release.json()
   const uploadUrl = releaseData.upload_url.replace(/\{.*$/, '')
+  for (const asset of releaseData.assets || []) {
+    if (asset.name !== name) continue
+    const removed = await fetch(asset.url, {
+      method: 'DELETE',
+      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${githubToken}`, 'X-GitHub-Api-Version': '2022-11-28' },
+    })
+    if (removed.status !== 204) throw new Error(`Could not replace GitHub asset ${name}: ${removed.status} ${await removed.text()}`)
+  }
   const response = await fetch(`${uploadUrl}?name=${encodeURIComponent(name)}`, {
     method: 'POST', headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${githubToken}`, 'Content-Type': 'application/octet-stream', 'Content-Length': String(data.length), 'X-GitHub-Api-Version': '2022-11-28' }, body: data,
   })
-  if (!response.ok && response.status !== 422) throw new Error(`GitHub upload ${name} failed: ${response.status} ${await response.text()}`)
+  if (!response.ok) throw new Error(`GitHub upload ${name} failed: ${response.status} ${await response.text()}`)
 }
 await githubUpload(exeName, exe)
 if (blockmap) await githubUpload(blockmapName, blockmap)
@@ -49,4 +57,8 @@ async function supabaseUpload(name, data, contentType) {
 await supabaseUpload(latestName, Buffer.from(latest), 'text/yaml')
 const manifest = { version, published_at: new Date().toISOString(), notes: process.env.YURLAPS_RELEASE_NOTES || '', installer: { name: exeName, url: githubAssetUrl, size: exe.length } }
 await supabaseUpload('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)), 'application/json')
+for (const name of [latestName, 'manifest.json']) {
+  const response = await fetch(`${url}/storage/v1/object/public/${bucket}/${encodeURIComponent(name)}?v=${Date.now()}`)
+  if (!response.ok) throw new Error(`Release file ${name} is not public: ${response.status} ${await response.text()}`)
+}
 console.log(`Published YurLaps ${version}: installer on GitHub, manifest/latest.yml on Supabase`)

@@ -368,7 +368,7 @@ jobs:
         run: |
           $tag = $env:GITHUB_REF_NAME
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
-            throw "Tag tidak valid: $tag. Gunakan format v0.5.8."
+            throw "Tag tidak valid: $tag. Gunakan format v0.5.9."
           }
           $env:YURLAPS_RELEASE_VERSION = $tag.Substring(1)
           node tools/publish_release.mjs

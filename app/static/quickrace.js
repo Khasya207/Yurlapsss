@@ -53,7 +53,7 @@ function mmss(v){
    ========================================================================== */
 /* Rute yang memakai POST walau tanpa badan permintaan. Tanpa daftar ini,
    fetch memakai GET dan rute POST akan menjawab 404. */
-const RUTE_POST = ['/api/race/track','/api/race/cfg','/api/race/peserta',
+const RUTE_POST = ['/api/practice/close','/api/practice/delete','/api/race/track','/api/race/cfg','/api/race/peserta',
   '/api/race/start','/api/race/go','/api/race/pass','/api/race/finish',
   '/api/race/reset','/api/race/resume','/api/race/save','/api/race/discard','/api/race/upload',
   '/api/track','/api/track/delete','/api/tracks/sync','/api/preset','/api/preset/delete'];
@@ -124,6 +124,7 @@ async function muatAwal(){
   DATA.preset = b.presets || [];
   sesi = b.race;
   eventTimingActive = !!b.active_event;
+  document.querySelector('[data-view="event"]').hidden=!eventTimingActive;
   state.trackId = sesi.track_id || (DATA.track[0] && DATA.track[0].id) || null;
   const c = sesi.cfg || {};
   const cocok = DATA.preset.find(p => p.name === c.nama);
@@ -153,7 +154,7 @@ async function segarkanSesi(){
    NAVIGASI
    ========================================================================== */
 const VIEWS = ['practice','quickrace','event','history','member','guest','track','decoder','sound'];
-window.YurLapsEventTimingLock = active => { eventTimingActive = !!active; };
+window.YurLapsEventTimingLock = active => { eventTimingActive = !!active; document.querySelector('[data-view="event"]').hidden=!eventTimingActive; };
 function show(v){
   if(v === 'quickrace' && eventTimingActive){ v = 'event'; toast('Sesi Event sedang memakai timing'); }
   VIEWS.forEach(k => { const s = $('view-' + k); if(s) s.style.display = (k === v) ? '' : 'none'; });
@@ -329,6 +330,7 @@ function renderPractice(){
   $('practiceSync').textContent=accountData.syncing?'Sinkronisasi…':cloudOnline()?'Online · otomatis':'Tersimpan di perangkat';
   $('practiceLive').innerHTML=ps.active?'<i></i> Otomatis aktif':sesi?.status!=='idle'?'Dijeda selama race':'Menunggu track aktif';
   $('practiceWindow').textContent=`Sesi ditutup setelah ${Number(ps.idle_seconds||120)} detik tanpa passing driver`;
+  $('practiceClose').disabled=!sessions.length;
   $('practiceBadge').textContent=rows.length;$('practiceBadge').classList.toggle('on',rows.length>0);
   $('practiceBody').innerHTML=rows.length?rows.map((d,i)=>`<tr class="row" data-practice-live="${i}"><td class="nm"><span class="rank-dot ${['gold','silver','bronze'][i]||''}">${i+1}</span> ${esc(d.name)}<small>TP ${esc(d.tp)}</small></td><td class="num r">${d.laps}</td><td class="num r">${fmtLap(d.total)}</td><td class="best r">${fmtLap(d.best)}</td><td class="num r">${fmtLap(d.top3)}</td><td class="num r">${fmtLap(d.cons)}</td><td class="num r">${fmtLap(d.p80)}</td><td class="num r">${d.consistency==null?'—':d.consistency.toFixed(1)+'%'}</td><td class="num r">${speed(d.topSpeed)}</td></tr>`).join(''):'<tr><td colspan="9" class="empty"><b>Belum ada practice aktif</b>Passing pertama membuka sesi saat track aktif dan race tidak berjalan.</td></tr>';
   $('practiceBody').querySelectorAll('[data-practice-live]').forEach(b=>b.onclick=()=>{const d=rows[Number(b.dataset.practiceLive)];practiceDetail(d.session,d.tp);});
@@ -337,10 +339,23 @@ function renderPractice(){
   hist.forEach((s,si)=>practiceRows(s).forEach(d=>{const key=String(d.driver.driver_id||d.driver.user_id||d.driver.member_id||'tp-'+d.tp);if(!groups.has(key))groups.set(key,{key,name:d.name,full:d.fullName,avatar:d.avatar,sessions:[]});groups.get(key).sessions.push({session:s,tp:d.tp,laps:d.laps,index:si});}));
   const opened=new Set([...$('practiceSessions').querySelectorAll('details[open]')].map(el=>el.dataset.memberKey));
   $('practiceSessionCount').textContent=hist.length+' sesi · '+groups.size+' member';
-  $('practiceSessions').innerHTML=groups.size?[...groups.values()].map(g=>`<details class="practice-member" data-member-key="${esc(g.key)}" ${opened.has(g.key)?'open':''}><summary>${g.avatar&&/^https?:/.test(g.avatar)?`<img class="avatar" src="${esc(g.avatar)}" alt="" referrerpolicy="no-referrer">`:`<span class="avatar">${esc(g.name.slice(0,2).toUpperCase())}</span>`}<span><b>${esc(g.name)}</b><small>${g.sessions.length} sesi latihan</small></span></summary>${g.sessions.map(({session:s,tp,laps,index})=>`<button class="practice-session" data-practice-index="${index}" data-practice-tp="${esc(tp)}"><span><b>${esc(s.track_name||'Sesi practice')}</b><span>${esc(fmtTgl(s.started_at))} · ${laps} lap · ${s.sync==='terkirim'?'tersinkron':'menunggu sinkronisasi'}</span></span><span class="session-arrow">›</span></button>`).join('')}</details>`).join(''):'<div class="empty"><b>Belum ada sesi selesai</b>Sesi tersimpan per driver setelah jeda idle, pergantian track, atau race dimulai.</div>';
+  $('practiceSessions').innerHTML=groups.size?[...groups.values()].map(g=>`<details class="practice-member" data-member-key="${esc(g.key)}" ${opened.has(g.key)?'open':''}><summary>${g.avatar&&/^https?:/.test(g.avatar)?`<img class="avatar" src="${esc(g.avatar)}" alt="" referrerpolicy="no-referrer">`:`<span class="avatar">${esc(g.name.slice(0,2).toUpperCase())}</span>`}<span><b>${esc(g.name)}</b><small>${g.sessions.length} sesi latihan</small></span></summary>${g.sessions.map(({session:s,tp,laps,index})=>`<div class="practice-log-row"><button class="practice-session" data-practice-index="${index}" data-practice-tp="${esc(tp)}"><span><b>${esc(s.track_name||'Sesi practice')}</b><span>${esc(fmtTgl(s.started_at))} · ${laps} lap · ${s.sync==='terkirim'?'tersinkron':'menunggu sinkronisasi'}</span></span><span class="session-arrow">›</span></button><button class="btn sm" type="button" data-practice-delete="${esc(s.id)}" data-practice-synced="${s.sync==='terkirim'}" aria-label="Hapus sesi practice ${esc(s.track_name||fmtTgl(s.started_at))} dari komputer">Hapus</button></div>`).join('')}</details>`).join(''):'<div class="empty"><b>Belum ada sesi selesai</b>Sesi tersimpan per driver setelah jeda idle, pergantian track, atau race dimulai.</div>';
   $('practiceSessions').querySelectorAll('[data-practice-index]').forEach(b=>b.onclick=()=>practiceDetail(hist[Number(b.dataset.practiceIndex)],b.dataset.practiceTp));
+  $('practiceSessions').querySelectorAll('[data-practice-delete]').forEach(b=>b.onclick=async()=>{
+    const message=b.dataset.practiceSynced==='true'?'Hapus salinan sesi ini dari komputer? Sesi yang sudah tersinkron tetap ada di website.':'Hapus sesi practice ini dari komputer?';
+    if(!confirm(message))return;
+    b.disabled=true;
+    try{await api('/api/practice/delete',{id:b.dataset.practiceDelete});await refreshPractice();toast('Sesi lokal dihapus');}
+    catch(e){b.disabled=false;gagal(e);}
+  });
   $('practiceClock').textContent=new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
 }
+$('practiceClose').onclick=async()=>{
+  if(!confirm('Tutup semua sesi Practice aktif dan simpan hasilnya sekarang?'))return;
+  $('practiceClose').disabled=true;
+  try{await api('/api/practice/close',{});await refreshPractice();toast('Sesi Practice ditutup');}
+  catch(e){$('practiceClose').disabled=false;gagal(e);}
+};
 async function refreshPractice(){
   if(practiceRefreshBusy)return;practiceRefreshBusy=true;
   try{const [a,h]=await Promise.all([api('/api/practice/state'),api('/api/practice/history')]);practiceData.state=a.practice||null;practiceData.history=h.sessions||[];renderPractice();}

@@ -22,7 +22,7 @@
 ; ===========================================================================
 
 #define AppName "YurLaps"
-#define AppVersion "0.3.0"
+#define AppVersion "0.5.9"
 #define AppPublisher "YurLaps"
 #define AppExeName "YurLaps.exe"
 

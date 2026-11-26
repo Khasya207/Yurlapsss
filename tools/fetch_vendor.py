@@ -5,18 +5,14 @@ Yang diunduh:
 1. **Zadig** (driver installer WinUSB, libwdi — GPL-3.0) ke `vendor/win/`.
    Dipakai YurLaps sebagai *fallback* bila `wdi-simple.exe` tidak tersedia.
    Diunduh dari rilis resmi GitHub pbatard/libwdi, tidak dimodifikasi.
-2. **OpenStint** (Windows x64, rilis resmi) ke `vendor/openstint/` — opsional.
-   Kalau tidak dibundel, YurLaps mengunduhnya sendiri saat pertama dijalankan.
-
 Contoh:
 
-    python tools/fetch_vendor.py                # zadig + openstint
-    python tools/fetch_vendor.py --zadig        # hanya zadig
-    python tools/fetch_vendor.py --openstint    # hanya openstint
+    python tools/fetch_vendor.py                # zadig
+    python tools/fetch_vendor.py --zadig        # zadig
     python tools/fetch_vendor.py --if-windows   # lewati kalau bukan Windows
 
 Semua kegagalan bersifat *non-fatal*: aplikasi tetap bisa dibangun dan tetap
-jalan (hanya tanpa driver-installer bawaan / tanpa biner decoder bawaan).
+jalan (hanya tanpa driver-installer bawaan).
 """
 from __future__ import annotations
 
@@ -26,7 +22,6 @@ import os
 import shutil
 import sys
 import urllib.request
-import zipfile
 from pathlib import Path
 
 try:                     # konsol Windows (cp1252) tidak bisa cetak karakter khusus
@@ -40,8 +35,6 @@ VENDOR = ROOT / "vendor"
 
 ZADIG_API = "https://api.github.com/repos/pbatard/libwdi/releases/latest"
 ZADIG_ASSET = "zadig"
-OPENSTINT_API = "https://api.github.com/repos/zsellera/openstint/releases/latest"
-OPENSTINT_ASSET = "windows-x64-Release.zip"
 
 
 def _get_json(url: str) -> dict:
@@ -87,46 +80,9 @@ def fetch_zadig() -> bool:
         return False
 
 
-def fetch_openstint() -> bool:
-    out_dir = VENDOR / "openstint"
-    if any((out_dir / n).is_file() for n in ("openstint_rtlsdr.exe", "openstint_rtlsdr")):
-        print("  openstint sudah ada")
-        return True
-    try:
-        rel = _get_json(OPENSTINT_API)
-        asset = next((a for a in rel.get("assets", []) if OPENSTINT_ASSET in a["name"]), None)
-        if not asset:
-            print("  ! aset openstint Windows tidak ditemukan")
-            return False
-        zip_path = _download(asset["browser_download_url"], out_dir / "openstint.zip")
-        with zipfile.ZipFile(zip_path) as zf:
-            zf.extractall(out_dir)
-        zip_path.unlink(missing_ok=True)
-        for name in ("openstint_rtlsdr.exe", "openstint_rtlsdr"):
-            for found in out_dir.rglob(name):
-                if found.parent != out_dir:
-                    shutil.move(str(found), str(out_dir / name))
-        print(f"  + openstint {asset['name']} -> vendor/openstint/ "
-              f"({asset['size'] // 1024 // 1024} MB)")
-        (out_dir / "ATTRIBUTION.txt").write_text(
-            "OpenStint - https://github.com/zsellera/openstint\n"
-            "Lisensi: GNU General Public License v3.0 (GPL-3.0)\n"
-            "Teks lisensi: https://github.com/zsellera/openstint/blob/master/LICENSE\n"
-            "Sumber versi ini: " + rel.get("html_url", "https://github.com/zsellera/openstint/releases") + "\n\n"
-            "Biner resmi dari rilis GitHub, TIDAK dimodifikasi.\n"
-            "YurLaps hanya menjalankannya sebagai proses terpisah dan berkomunikasi\n"
-            "lewat protokol ZeroMQ yang didokumentasikan proyek tersebut.\n"
-            "YurLaps tidak berafiliasi dengan pemilik OpenStint.\n", encoding="utf-8")
-        return True
-    except Exception as exc:
-        print(f"  ! gagal mengunduh openstint: {exc}")
-        return False
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--zadig", action="store_true")
-    ap.add_argument("--openstint", action="store_true")
     ap.add_argument("--if-windows", action="store_true",
                     help="hanya jalankan bila platform Windows (untuk CI)")
     args = ap.parse_args()
@@ -135,15 +91,8 @@ def main() -> int:
         print("Lewati: bukan Windows")
         return 0
 
-    do_zadig = args.zadig or not (args.zadig or args.openstint)
-    do_openstint = args.openstint or not (args.zadig or args.openstint)
-
     print("Menyiapkan komponen pihak ketiga di vendor/ ...")
-    ok = True
-    if do_zadig:
-        ok &= fetch_zadig()
-    if do_openstint:
-        ok &= fetch_openstint()
+    ok = fetch_zadig()
     print("Selesai." if ok else "Selesai dengan peringatan (aplikasi tetap bisa dibangun).")
     return 0          # selalu 0: build tidak boleh gagal karena ini
 

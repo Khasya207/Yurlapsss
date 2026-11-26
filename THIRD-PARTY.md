@@ -1,7 +1,7 @@
 # Komponen pihak ketiga dan lisensi
 
-StintLab/YurLaps memakai decoder native milik proyek ini. Tidak ada kode
-OpenStint di aplikasi ini.
+YurLaps membangun decoder native dari `decoder/native/` dan tidak membundel
+biner OpenStint atau RC Hourglass.
 
 | Komponen | Sumber | Lisensi | Penggunaan |
 |---|---|---|---|

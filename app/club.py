@@ -659,6 +659,12 @@ class ClubStore:
         return next((row for row in rows if row.get("id") == sid), None)
 
     @locked
+    def hapus_practice_lokal(self, sid: str) -> bool:
+        cur = self._conn.execute("DELETE FROM practice_session WHERE id=?", (sid,))
+        self._conn.commit()
+        return cur.rowcount > 0
+
+    @locked
     def tandai_practice_terkirim(self, sid: str, remote_id: Optional[str] = None,
                                 *, revision: Optional[int] = None) -> bool:
         cur = self._conn.execute(

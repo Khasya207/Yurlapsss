@@ -1,4 +1,4 @@
-# YurLaps 0.4.1
+# YurLaps 0.5.9
 
 YurLaps mencatat passing dari YurLapsDecoder YLP-1, menjalankan Practice dan
 Quick Race, menyimpan hasil lokal, lalu menyinkronkannya ke website YurLaps.
@@ -13,7 +13,7 @@ Jangan memakai folder aplikasi lama di luar paket ini, dan jangan menjalankan
 HTML dokumentasi sebagai aplikasi. Semua launcher memakai UI produksi yang sama.
 
 Installer dibangun oleh workflow **Build Windows**. Pilih
-`YurLaps-Setup-0.4.1.exe` dari artifact `YurLaps-Windows`. File `*-full.exe`
+`YurLaps-Setup-0.5.9.exe` dari artifact `YurLaps-Windows`. File `*-full.exe`
 adalah installer jalur pembaruan lama, bukan installer utama. Nama ZIP portable
 mengikuti `desktop/package.json` (pola `YurLaps-Setup-<versi>.zip`).
 

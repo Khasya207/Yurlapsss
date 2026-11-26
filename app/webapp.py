@@ -492,6 +492,7 @@ def make_handler(ctx: AppContext):
                         "announce_driver", "announce_position_change", "announce_best_lap",
                         "announce_position_mode", "announce_lap", "announce_best_lap_mode",
                         "announce_best_lap_every", "announce_last_lap", "announce_finish",
+                        "announce_practice_lap",
                         "tts_rate", "tts_voice", "tts_language", "beep_volume", "beep_duration_ms")
                 return self._json({"ok": True, "settings": {k: getattr(cfg, k) for k in keys}})
 
@@ -978,6 +979,27 @@ def make_handler(ctx: AppContext):
             if path == "/api/practice/visibility":
                 return self._err(409, "Privasi practice diatur dari dashboard website pemilik akun")
 
+            if path == "/api/practice/close":
+                if not self._cloud_local():
+                    return self._err(403, "Practice hanya dapat ditutup dari komputer ini")
+                with ctx._club_lock:
+                    closed = ctx.practice.close_all("manual")
+                    if ctx.practice.snapshot()["pending_persistence"]:
+                        return self._err(503, "Sesi ditutup, tetapi penyimpanan gagal. Coba lagi.")
+                return self._json({"ok": True, "closed": len(closed)})
+
+            if path == "/api/practice/delete":
+                if not self._cloud_local():
+                    return self._err(403, "Sesi hanya dapat dihapus dari komputer ini")
+                sid = str(data.get("id") or "")
+                if not sid:
+                    return self._err(400, "id sesi wajib")
+                with ctx._club_lock:
+                    if not ctx.club.hapus_practice_lokal(sid):
+                        return self._err(404, "Sesi tidak ditemukan")
+                    ctx.practice.history = [s for s in ctx.practice.history if s.get("id") != sid]
+                return self._json({"ok": True, "deleted": sid})
+
             if path == "/api/race/save":
                 try:
                     info = ctx.race.simpan(data.get("nama"))
@@ -1129,6 +1151,7 @@ def make_handler(ctx: AppContext):
                     "announce_best_lap_mode": str,
                     "announce_best_lap": bool, "announce_best_lap_every": int,
                     "announce_last_lap": bool, "announce_finish": bool,
+                    "announce_practice_lap": bool,
                     "tts_rate": float, "tts_voice": str, "tts_language": str, "beep_duration_ms": int,
                     "manage_decoder": bool, "decoder_exe": str,
                     "decoder_args": str, "decoder_auto_download": bool,

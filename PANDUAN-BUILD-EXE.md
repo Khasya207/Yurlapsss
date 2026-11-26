@@ -1,4 +1,4 @@
-# Build YurLaps Windows 0.4.1
+# Build YurLaps Windows 0.5.9
 
 Paket ini adalah source repository. Installer Windows belum terbentuk hanya
 karena ZIP source sudah dibuat. Gunakan repository yang sudah ada:
@@ -14,7 +14,7 @@ karena ZIP source sudah dibuat. Gunakan repository yang sudah ada:
 4. Workflow menjalankan tes, membangun YurLaps Decoder dan DLL, membundel mesin
    Python beserta UI, kemudian membangun installer Electron.
 5. Setelah semua job hijau, unduh artifact `YurLaps-Windows`.
-6. Jalankan **YurLaps-Setup-0.4.1.exe**. Jangan memilih file `*-full.exe` sebagai
+6. Jalankan **YurLaps-Setup-0.5.9.exe**. Jangan memilih file `*-full.exe` sebagai
    installer utama. ZIP portable, bila dibutuhkan, harus diekstrak seluruhnya.
 
 Jika build merah, installer belum siap. Baca langkah yang gagal; jangan mengambil
@@ -24,8 +24,8 @@ artifact versi sebelumnya lalu menamainya sebagai versi baru.
 
 Prasyarat: Python 3.12 x64, Node.js 22, npm, dan binary decoder beserta DLL.
 Cara paling mudah memperoleh decoder adalah artifact `yurlaps-decoder` dari
-workflow yang sama. Salin isi `decoder-out` ke `vendor/openstint` dan sertakan
-`ATTRIBUTION.txt` serta arsip sumber decoder GPL.
+workflow yang sama. Salin isi `decoder-out` ke `vendor/decoder` dan sertakan
+`NOTICES.txt` serta arsip sumber librtlsdr sesuai kewajiban lisensi.
 
 Jalankan `build_exe.bat`. Script memasang `requirements.txt`, memverifikasi file,
 membangun `YurLapsEngine.exe`, kemudian menjalankan `npm ci` dan `npm run dist`
@@ -46,7 +46,7 @@ Jalur `stintlab.spec` adalah fallback developer dan bukan installer utama.
 3. Tambahkan secrets repository `YURLAPS_SUPABASE_URL` dan
    `YURLAPS_SUPABASE_SERVICE_ROLE_KEY`. Service-role key hanya ada di CI.
 4. Pastikan `app/config.py`, `desktop/package.json`, dan lockfile memiliki versi
-   yang sama. Buat tag `v0.4.1` pada commit tersebut, lalu push tag.
+   yang sama. Buat tag `v0.5.9` pada commit tersebut, lalu push tag.
 5. Workflow membangun installer dan mengunggahnya beserta `latest.yml`, blockmap,
    dan `manifest.json` ke storage website.
 6. Verifikasi halaman download website dan menu Pembaruan di aplikasi Windows

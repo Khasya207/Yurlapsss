@@ -5,7 +5,7 @@ const api=window.YurLapsUI.api;
 const $=id=>document.getElementById(id);
 const queue=[];
 let speaking=false,audio=null,hornAudio=null,sessionId=null,lastEvent=0,pendingBest=null,pollBusy=false;
-let settings={sound_passing:true,sound_ignore:true,sound_countdown:true,announce_driver:false,
+let settings={sound_passing:true,sound_ignore:true,sound_countdown:true,announce_driver:false,announce_practice_lap:true,
   announce_position_mode:'off',announce_lap:false,announce_best_lap_mode:'off',announce_best_lap_every:3,
   announce_last_lap:false,announce_finish:true,tts_rate:1,tts_voice:'',tts_language:'id-ID',beep_volume:.6,beep_duration_ms:80,
   horn_enabled:true,horn_file:'builtin'};
@@ -77,6 +77,14 @@ function enqueue(job){
   else if(job?.type==='tts')say(job.text);
 }
 function ttsName(e){return String(e.tts_name||'').trim();}
+function practiceAnnouncement(e){
+  if(!settings.announce_practice_lap||e.source!=='practice'||!e.result?.accepted||e.result.origin)return;
+  const lap=Number(e.result.lap_ms);
+  if(!Number.isFinite(lap)||lap<=0)return;
+  const name=String(e.result.driver?.tts_name||'').trim()||'Transponder '+String(e.transponder_id);
+  const time=(lap/1000).toFixed(3);
+  say(name+' lap '+(settings.tts_language.startsWith('id')?time.replace('.',',')+' detik':time+' seconds'));
+}
 function bestAnnouncement(e){if(ttsName(e))say(`${ttsName(e)} best lap ${(Number(e.lap_ms)/1000).toFixed(3)}`);}
 function processEvents(race){
   const sid=race.session_id;
@@ -128,7 +136,7 @@ function refreshVoices(){
   select.value=settings.tts_voice;
 }
 function renderSettings(){
-  const checks={soundCountdown:'sound_countdown',soundDriver:'announce_driver',soundLap:'announce_lap',soundLastLap:'announce_last_lap',soundFinish:'announce_finish'};
+  const checks={soundCountdown:'sound_countdown',soundDriver:'announce_driver',soundPracticeLap:'announce_practice_lap',soundLap:'announce_lap',soundLastLap:'announce_last_lap',soundFinish:'announce_finish'};
   Object.entries(checks).forEach(([id,key])=>$(id).checked=!!settings[key]);
   $('soundPositionMode').value=settings.announce_position_mode;
   $('soundBestMode').value=settings.announce_best_lap_mode;
@@ -155,7 +163,7 @@ function save(){
   if(!Number.isInteger(n)||n<1||n>999||!Number.isFinite(rate)||rate<.5||rate>2||!Number.isInteger(beepMs)||beepMs<20||beepMs>300){$('soundSaved').textContent='Periksa interval, durasi beep, dan kecepatan suara';return;}
   const body={sound_passing:true,sound_ignore:true,sound_countdown:$('soundCountdown').checked,
     horn_enabled:$('hornEnabled').checked,horn_file:settings.horn_file,
-    announce_driver:$('soundDriver').checked,announce_position_mode:$('soundPositionMode').value,
+    announce_driver:$('soundDriver').checked,announce_practice_lap:$('soundPracticeLap').checked,announce_position_mode:$('soundPositionMode').value,
     announce_position_change:$('soundPositionMode').value==='changed',announce_lap:$('soundLap').checked,
     announce_best_lap_mode:$('soundBestMode').value,announce_best_lap:$('soundBestMode').value!=='off',
     announce_best_lap_every:n,announce_last_lap:$('soundLastLap').checked,announce_finish:$('soundFinish').checked,
@@ -163,7 +171,7 @@ function save(){
   $('soundSaved').textContent='menyimpan…';
   saveChain=saveChain.then(async()=>{try{await api('/api/settings',body);settings={...settings,...body};pendingBest=null;$('soundSaved').textContent='tersimpan';}catch(e){$('soundSaved').textContent='Gagal: '+e.message;}});
 }
-['soundCountdown','hornEnabled','soundDriver','soundPositionMode','soundLap','soundBestMode','soundLastLap','soundFinish','soundBestEvery','soundLanguage','soundRate','soundVoice','soundVolume','soundBeepMs'].forEach(id=>$(id).addEventListener('change',save));
+['soundCountdown','hornEnabled','soundDriver','soundPracticeLap','soundPositionMode','soundLap','soundBestMode','soundLastLap','soundFinish','soundBestEvery','soundLanguage','soundRate','soundVoice','soundVolume','soundBeepMs'].forEach(id=>$(id).addEventListener('change',save));
 $('soundTest').addEventListener('click',()=>{beep(false);playHorn();say('Tes suara YurLaps');});
 $('hornBuiltin').addEventListener('click',()=>{settings.horn_file='builtin';save();renderSettings();});
 $('hornFile').addEventListener('change',async()=>{
@@ -182,7 +190,7 @@ document.addEventListener('pointerdown',unlock,{once:true});document.addEventLis
 if(window.speechSynthesis)speechSynthesis.onvoiceschanged=refreshVoices;
 const token=new URLSearchParams(window.location.search).get('t');
 const source=new EventSource('/api/events'+(token?'?t='+encodeURIComponent(token):''));
-source.onmessage=ev=>{try{const e=JSON.parse(ev.data);if(e.kind==='race_passing')beep(!e.result?.diterima);}catch(_) {}};
+source.onmessage=ev=>{try{const e=JSON.parse(ev.data);if(e.kind==='race_passing'){beep(!e.result?.diterima);practiceAnnouncement(e);}}catch(_) {}};
 // One warm-up snapshot avoids replaying already spoken events after reopening
 // the window. Subsequent snapshots can be consumed by the main UI as well.
 let ready=false;

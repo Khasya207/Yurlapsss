@@ -421,7 +421,7 @@
   @keyframes dropIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
   #presetAppliedBar{display:none}.practice-head .right{align-items:center}.practice-live{display:inline-flex;align-items:center;gap:7px;color:#09834e;background:#e8f8ef;border:1px solid #c8eeda;border-radius:999px;padding:6px 10px;font-size:11px;font-weight:700}.practice-live i{width:7px;height:7px;border-radius:50%;background:#12b76a;box-shadow:0 0 0 3px rgba(18,183,106,.18)}.practice-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:15px}.practice-board-card{min-width:0}.practice-note{margin-left:auto;font-size:10.5px;color:var(--muted2)}.practice-clock{font:700 15px 'Cascadia Mono',Consolas,monospace;color:var(--ink);margin-left:auto}.practice-board-card .practice-clock+.practice-note{margin-left:0}.practice-board-card tbody tr{animation:rowIn .3s ease-out both}.practice-board-card tbody tr:hover{background:#f6fbff}.practice-board-card td.nm small{font-size:9.5px}.practice-board-card td.pos{font-size:16px}.practice-board-card tr.medal-gold{background:linear-gradient(90deg,#fff9e5,#fff)}.practice-board-card tr.medal-silver{background:linear-gradient(90deg,#f3f6fb,#fff)}.practice-board-card tr.medal-bronze{background:linear-gradient(90deg,#fff3ec,#fff)}.practice-board-card .rank-dot{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;font-size:11px;font-weight:800}.rank-dot.gold{background:#f8d568;color:#765400}.rank-dot.silver{background:#cbd5e1;color:#4a5563}.rank-dot.bronze{background:#e7a276;color:#713d1d}.practice-sessions{display:grid;gap:7px}.practice-session{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:9px;background:#fcfdff;cursor:pointer;transition:.14s}.practice-session:hover{border-color:#bfe6f7;background:#f3fbff;transform:translateX(2px)}.practice-session b{font-size:11.5px;color:var(--ink);display:block}.practice-session span{font-size:10px;color:var(--muted)}.practice-session .session-arrow{margin-left:auto;color:var(--blue)}.table-scroll{overflow:auto}#practiceBoard{min-width:920px}
   .login-dlg{width:410px}.login-mark{display:flex;gap:10px;align-items:center;margin-bottom:15px}.login-mark .avatar{width:38px;height:38px;font-size:13px}.login-mark h2{margin:0}.login-hint{font-size:10.5px;color:var(--muted);background:#f7f9fc;border-radius:8px;padding:8px 10px}.finish-dlg{width:520px;text-align:center}.finish-icon{width:43px;height:43px;margin:0 auto 10px;border-radius:14px;display:grid;place-items:center;background:#fff1ef;color:var(--bad);font-size:18px}.finish-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;text-align:left;margin-top:18px}.finish-choice{padding:14px;border:1px solid var(--line);border-radius:11px;background:#fff;transition:.15s}.finish-choice:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(13,43,69,.1)}.finish-choice b,.finish-choice span{display:block}.finish-choice b{font-size:12.5px}.finish-choice span{font-size:10.5px;color:var(--muted);margin-top:3px}.finish-choice.discard b{color:var(--bad)}.finish-choice.save{border-color:#bce9d2;background:#f4fcf7}.finish-choice.save b{color:#0b7a45}.finish-dlg .foot{justify-content:center}.finish-dlg .foot .btn{width:100%}
-  .practice-detail-banner{display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:#eff9ff;border:1px solid #ccecf9;margin-bottom:13px}.practice-detail-banner b{color:var(--ink);font-size:12px}.practice-detail-banner span{font-size:10.5px;color:var(--muted)}
+  .practice-detail-banner{display:flex;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:10px;background:#eff9ff;border:1px solid #ccecf9;margin-bottom:13px}.practice-detail-banner b{color:var(--ink);font-size:12px}.practice-detail-banner span{font-size:10.5px;color:var(--muted)}.practice-log-row{display:flex;align-items:center;gap:6px}.practice-log-row .practice-session{flex:1;min-width:0;text-align:left}.practice-log-row .btn{flex:none}
   @keyframes rowIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
   /* Countdown tetap membiarkan leaderboard terlihat di belakangnya. */
   .cd{inset:58px 0 0 190px;background:rgba(7,36,56,.58);backdrop-filter:blur(3px)}
@@ -467,8 +467,8 @@
       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
         <path d="M5 21V4l7 4 7-4v11l-7 4-7-2z"/></svg> Quick Race
     </button>
-    <button class="tab" data-view="event">
-      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM8 3v4M16 3v4M4 10h16M8 14h3M14 14h3"/></svg> Event
+    <button class="tab" data-view="event" hidden>
+      <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v14H4zM8 3v4M16 3v4M4 10h16M8 14h3M14 14h3"/></svg> Event aktif
     </button>
     <button class="tab" data-view="history">
       <svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
@@ -608,7 +608,7 @@
       <div class="head practice-head">
         <div><h1>Practice</h1>
           <div class="lead">Sesi latihan berjalan otomatis saat lintasan tidak dipakai race.</div></div>
-        <div class="right"><span class="practice-live" id="practiceLive"><i></i> Otomatis aktif</span><span class="chip" id="practiceWindow">Sesi selesai setelah driver berhenti melintas</span></div>
+        <div class="right"><span class="practice-live" id="practiceLive"><i></i> Otomatis aktif</span><span class="chip" id="practiceWindow">Sesi selesai setelah driver berhenti melintas</span><button class="btn" id="practiceClose" type="button" disabled>Tutup sesi aktif</button></div>
       </div>
       <div class="practice-summary stat">
         <div class="cell"><span>Track aktif</span><b id="practiceTrack">—</b></div>
@@ -621,7 +621,7 @@
           <div class="big-bar"><span class="live"><i></i>LEADERBOARD LATIHAN</span><span class="practice-clock" id="practiceClock">00:00</span><span class="practice-note">Race tidak ikut di sini</span></div>
           <div class="table-scroll"><table id="practiceBoard"><thead><tr><th>Driver</th><th class="r">Laps</th><th class="r">Total time</th><th class="r">Best lap</th><th class="r">Top3 avg</th><th class="r">Top3 cons.</th><th class="r">P80 avg</th><th class="r">Consistency</th><th class="r">Top speed</th></tr></thead><tbody id="practiceBody"></tbody></table></div>
         </div>
-        <div class="side-card practice-session-card"><h3>Session log per member <span id="practiceSessionCount">0 sesi</span></h3><div id="practiceSessions" class="practice-sessions"></div></div>
+        <div class="side-card practice-session-card"><h3>Session log per member <span id="practiceSessionCount">0 sesi</span></h3><div id="practiceSessions" class="practice-sessions"></div><p class="note">Hapus menghapus salinan di komputer ini. Sesi yang sudah tersinkron tetap ada di akun website.</p></div>
       </div>
     </div>
 
@@ -831,6 +831,7 @@
             <div class="field" id="soundBestEveryField"><label for="soundBestEvery">Periksa setiap (lap global)</label><input id="soundBestEvery" type="number" min="1" max="999" step="1" value="3"><p class="note">Hanya diumumkan jika ada rekor baru sejak pengumuman terakhir. Semua lap sah peserta menambah hitungan global.</p></div>
           </div>
           <div class="sound-grid">
+            <label class="check-label"><input id="soundPracticeLap" type="checkbox"> Practice: umumkan nama TTS atau ID transponder dan waktu lap</label>
             <label class="check-label"><input id="soundLap" type="checkbox"> Umumkan jumlah lap driver</label>
             <label class="check-label"><input id="soundLastLap" type="checkbox"> Umumkan last lap saat target lap</label>
             <label class="check-label"><input id="soundFinish" type="checkbox"> Umumkan finish driver dan klasemen akhir saat sesi selesai</label>
@@ -845,7 +846,7 @@
           </div>
           <button class="btn primary" id="soundTest" type="button">Tes suara</button>
         </div>
-      </div><div><div class="side-card"><h3>Nama TTS wajib</h3><p class="note">Setiap pengumuman memakai nama TTS yang diisi pada member, bukan nama akun atau nomor transponder. Lengkapi nama TTS di website untuk member club, atau di menu Member untuk driver offline.</p></div><div class="side-card"><h3>Audio perangkat</h3><p class="note" id="soundAudioState">Suara memakai output perangkat yang aktif, termasuk speaker Bluetooth. Jika membuka melalui browser, tekan Tes suara sekali untuk mengaktifkan audio.</p></div></div></div>
+      </div><div><div class="side-card"><h3>Nama pengumuman</h3><p class="note">Race memakai nama TTS member. Practice memakai nama TTS jika tersedia, lalu ID transponder sebagai cadangan.</p></div><div class="side-card"><h3>Audio perangkat</h3><p class="note" id="soundAudioState">Suara memakai output perangkat yang aktif, termasuk speaker Bluetooth. Jika membuka melalui browser, tekan Tes suara sekali untuk mengaktifkan audio.</p></div></div></div>
     </div>
 
     <!-- ==================== DECODER ==================== -->
