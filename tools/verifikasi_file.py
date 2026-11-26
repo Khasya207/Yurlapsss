@@ -379,7 +379,7 @@ def check_gitignore() -> bool:
 def check_data_update_rules() -> bool:
     """Aturan data saat update harus tertulis DAN tidak dilanggar installer.
 
-    Risiko nyata: pembaruan/uninstall menghapus %APPDATA%\YurLaps dan seluruh
+    Risiko nyata: pembaruan/uninstall menghapus %APPDATA%\\YurLaps dan seluruh
     hasil balapan pengguna ikut hilang.
     """
     doc = ROOT / "docs" / "PRODUCTION-CHECKLIST.md"
