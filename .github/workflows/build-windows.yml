@@ -18,7 +18,7 @@ on:
         default: false
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: windows-${{ github.workflow }}-${{ github.ref }}
@@ -364,6 +364,7 @@ jobs:
           YURLAPS_RELEASE_DIR: dist-electron
           YURLAPS_RELEASE_VERSION: ${{ github.ref_name }}
           YURLAPS_RELEASE_NOTES: ${{ github.event.head_commit.message }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = $env:GITHUB_REF_NAME
           if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
