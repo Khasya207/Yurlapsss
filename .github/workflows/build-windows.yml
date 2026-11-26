@@ -365,7 +365,11 @@ jobs:
           YURLAPS_RELEASE_VERSION: ${{ github.ref_name }}
           YURLAPS_RELEASE_NOTES: ${{ github.event.head_commit.message }}
         run: |
-          $env:YURLAPS_RELEASE_VERSION = $env:YURLAPS_RELEASE_VERSION.TrimStart('v')
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v\d+\.\d+\.\d+$') {
+            throw "Tag tidak valid: $tag. Gunakan format v0.5.8."
+          }
+          $env:YURLAPS_RELEASE_VERSION = $tag.Substring(1)
           node tools/publish_release.mjs
 
       - name: Ringkasan artefak
