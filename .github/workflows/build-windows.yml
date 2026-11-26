@@ -12,6 +12,10 @@ on:
         description: "Buat installer pembaruan Inno juga (NSIS selalu dibuat)"
         type: boolean
         default: true
+      publish_release:
+        description: "Publikasikan rilis ke website (hanya setelah diuji)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -348,7 +352,9 @@ jobs:
         run: python tools/buat_update_manifest.py --dir dist-electron
 
       - name: Publikasikan rilis ke website YurLaps
-        if: startsWith(github.ref, 'refs/tags/v')
+        # Build and artifact upload are safe by default. Publishing is an
+        # explicit manual action after the Windows artifact has been tested.
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_release == true && startsWith(github.ref, 'refs/tags/v')
         working-directory: ${{ steps.detect.outputs.root }}
         shell: pwsh
         env:
