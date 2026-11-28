@@ -37,7 +37,7 @@ CHECKS = [
     ("tools/engine.spec", "app/static", "UI dibundel bersama mesin"),
     ("tools/engine.spec", "vendor/decoder", "decoder ikut installer"),
     ("run_stintlab.py", '"--app-window"', "launcher menggunakan UI lengkap"),
-    (".github/workflows/build-windows.yml", "decoder/native", "sumber decoder YLP-1 ikut build"),
+    (".github/workflows/build-windows.yml", "DECODER_RELEASE_TAG", "decoder release terpin"),
     ("decoder/NOTICES.txt", "librtlsdr", "atribusi decoder dan librtlsdr"),
     ("decoder/native/src/main.cpp", "YURLAPS_YLP1=1", "decoder YLP-1"),
     ("decoder/native/CMakeLists.txt", "YurLapsDecoder", "build native decoder"),
@@ -440,8 +440,8 @@ def check_decoder_workflow() -> bool:
     ok = True
     wf = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(
         encoding="utf-8", errors="replace")
-    for marker in ("decoder/native", "YURLAPS_YLP1=1", "vendor/decoder", "NOTICES.txt",
-                   "rtlsdrblog/rtl-sdr-blog"):
+    for marker in ("DECODER_RELEASE_TAG", "protocol-check", "vendor/decoder", "NOTICES.txt",
+                   "Khasya207/Yurlaps-Decoder"):
         if marker not in wf:
             print(f"  GAGAL    workflow tidak memuat {marker}")
             ok = False

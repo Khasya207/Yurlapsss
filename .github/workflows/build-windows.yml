@@ -82,96 +82,30 @@ jobs:
   decoder:
     needs: test
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
+    env:
+      DECODER_REPO: Khasya207/Yurlaps-Decoder
+      DECODER_RELEASE_TAG: decoder-v0.1.0
+      DECODER_ASSET: YurLapsDecoder-windows-x64.zip
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup MSYS2 UCRT64
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          suppress-deprecation-warnings: msystem-ucrt64
-          update: false
-          cache: true
-          install: >-
-            mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-zeromq
-            mingw-w64-ucrt-x86_64-cppzmq
-            mingw-w64-ucrt-x86_64-libusb
-            git
-            zip
-      - name: Build librtlsdr Blog V4
-        shell: msys2 {0}
-        run: |
-          set -eu
-          git config --global core.autocrlf false
-          rm -rf rtl-sdr-blog rtlsdr-blog-prefix
-          git clone --depth 1 https://github.com/rtlsdrblog/rtl-sdr-blog.git rtl-sdr-blog
-          cmake -S rtl-sdr-blog -B rtl-sdr-blog/build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_FLAGS=-std=gnu11 \
-            -DINSTALL_UDEV_RULES=OFF -DCMAKE_INSTALL_PREFIX="$PWD/rtlsdr-blog-prefix"
-          cmake --build rtl-sdr-blog/build --parallel 2
-          cmake --install rtl-sdr-blog/build
-          test -f rtlsdr-blog-prefix/include/rtl-sdr.h
-          test -f rtlsdr-blog-prefix/lib/librtlsdr.dll.a
-          find rtlsdr-blog-prefix -maxdepth 3 -type f -print
-      - name: Build and test YurLapsDecoder
-        shell: msys2 {0}
-        run: |
-          set -eu
-          RTL_PREFIX="$PWD/rtlsdr-blog-prefix"
-          cmake -S decoder/native -B decoder/native/build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release -DYURLAPS_WITH_RTLSDR=ON -DYURLAPS_WITH_ZMQ=ON \
-            -DRTLSDR_INCLUDE_DIR="$RTL_PREFIX/include" \
-            -DRTLSDR_LIBRARY="$RTL_PREFIX/lib/librtlsdr.dll.a" \
-            -DLIBUSB_LIBRARY=/ucrt64/lib/libusb-1.0.dll.a \
-            -DZMQ_INCLUDE_DIR=/ucrt64/include \
-            -DZMQ_LIBRARY=/ucrt64/lib/libzmq.dll.a
-          test -f decoder/native/build/CMakeCache.txt
-          echo "Resolved native decoder paths:"
-          grep -E '^(RTLSDR_INCLUDE_DIR|RTLSDR_LIBRARY|LIBUSB_LIBRARY|ZMQ_INCLUDE_DIR|ZMQ_LIBRARY):' decoder/native/build/CMakeCache.txt || true
-          cmake --build decoder/native/build --parallel 2 --verbose 2>&1 | tee decoder/native/build/build.log
-          test ${PIPESTATUS[0]} -eq 0
-          test -s decoder/native/build/YurLapsDecoder.exe
-          ctest --test-dir decoder/native/build --output-on-failure
-          # The freshly built executable loads librtlsdr before main() runs.
-          # During this build-stage check the custom DLL is still outside
-          # /ucrt64/bin, so expose its prefix explicitly.
-          export PATH="$RTL_PREFIX/bin:/ucrt64/bin:$PATH"
-          protocol="$(decoder/native/build/YurLapsDecoder.exe --protocol-check)" || {
-            rc=$?
-            echo "protocol-check failed (exit $rc): $protocol"
-            exit $rc
-          }
-          test "$protocol" = "YURLAPS_YLP1=1"
-      - name: Package decoder and licenses
-        shell: msys2 {0}
-        run: |
-          set -eu
-          out="$PWD/decoder-out"; mkdir -p "$out"
-          cp decoder/native/build/YurLapsDecoder.exe "$out/"
-          cp decoder/NOTICES.txt "$out/"
-          rtl_matches=(rtlsdr-blog-prefix/bin/librtlsdr*.dll)
-          test -e "${rtl_matches[0]}" || { echo "missing custom librtlsdr DLL"; exit 1; }
-          cp "${rtl_matches[@]}" "$out/"
-          copy_dll() { matches=(/ucrt64/bin/$1); test -e "${matches[0]}" || { echo "missing DLL $1"; exit 1; }; cp "${matches[@]}" "$out/"; }
-          copy_dll 'libusb-1.0*.dll'
-          copy_dll 'libzmq*.dll'
-          copy_dll 'libsodium*.dll'
-          copy_dll 'libgcc_s_seh-1.dll'
-          copy_dll 'libstdc++-6.dll'
-          copy_dll 'libwinpthread-1.dll'
-          # UCRT64 uses libgcc_s_seh-1.dll; libgcc_s_ucrt-1.dll is not
-          # shipped by this toolchain and is not a dependency of the build.
-      - name: Test packaged decoder
+      - name: Download pinned YurLapsDecoder release
         shell: pwsh
         run: |
-          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-          $protocol = (& decoder-out/YurLapsDecoder.exe --protocol-check | Out-String)
-          if ($LASTEXITCODE -ne 0 -or $protocol -notmatch 'YURLAPS_YLP1=1') { throw "YurLapsDecoder package failed: $protocol" }
-          if (-not (Test-Path decoder-out/NOTICES.txt)) { throw "NOTICES.txt missing" }
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force decoder-out | Out-Null
+          $url = "https://github.com/$env:DECODER_REPO/releases/download/$env:DECODER_RELEASE_TAG/$env:DECODER_ASSET"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile decoder.zip
+          Expand-Archive -Path decoder.zip -DestinationPath decoder-out -Force
+          $exe = Get-ChildItem decoder-out -Filter "YurLapsDecoder.exe" -Recurse
+          if (-not $exe) { throw "YurLapsDecoder.exe tidak ada di release $env:DECODER_RELEASE_TAG" }
+          if (-not (Test-Path ($exe[0].DirectoryName + "\NOTICES.txt"))) { throw "NOTICES.txt tidak ada di release decoder" }
+          & $exe[0].FullName --protocol-check
+          if ($LASTEXITCODE -ne 0) { throw "Decoder release gagal dijalankan" }
+          if (-not (Get-Content decoder-out\NOTICES.txt -Raw -ErrorAction SilentlyContinue)) {
+            throw "NOTICES.txt kosong atau tidak ditemukan"
+          }
+          Write-Host "OK: memakai $env:DECODER_REPO@$env:DECODER_RELEASE_TAG"
       - uses: actions/upload-artifact@v4
         with:
           name: yurlaps-decoder
@@ -179,9 +113,6 @@ jobs:
           path: decoder-out/*
           if-no-files-found: error
 
-  # ---------------------------------------------------------------------------
-  # 2. Build Windows: mesin Python + jendela Electron
-  # ---------------------------------------------------------------------------
   build:
     needs: [test, decoder]
     runs-on: windows-latest
@@ -233,8 +164,8 @@ jobs:
         working-directory: ${{ steps.detect.outputs.root }}
         run: pip install -r requirements.txt pyinstaller
 
-      # Decoder dibangun di job "decoder" pada workflow ini juga (satu repo),
-      # lalu diunduh ke vendor/decoder sebelum aplikasi dibangun.
+      # Decoder dirilis dan dibangun di repo Yurlaps-Decoder terpisah.
+      # Versi release dipin di job decoder di atas.
       - name: Unduh decoder hasil job decoder
         uses: actions/download-artifact@v4
         with:

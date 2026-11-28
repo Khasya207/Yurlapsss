@@ -124,7 +124,7 @@ async function muatAwal(){
   DATA.preset = b.presets || [];
   sesi = b.race;
   eventTimingActive = !!b.active_event;
-  document.querySelector('[data-view="event"]').hidden=!eventTimingActive;
+  document.querySelector('[data-view="event"]').hidden=false;
   state.trackId = sesi.track_id || (DATA.track[0] && DATA.track[0].id) || null;
   const c = sesi.cfg || {};
   const cocok = DATA.preset.find(p => p.name === c.nama);
@@ -154,7 +154,7 @@ async function segarkanSesi(){
    NAVIGASI
    ========================================================================== */
 const VIEWS = ['practice','quickrace','event','history','member','guest','track','decoder','sound'];
-window.YurLapsEventTimingLock = active => { eventTimingActive = !!active; document.querySelector('[data-view="event"]').hidden=!eventTimingActive; };
+window.YurLapsEventTimingLock = active => { eventTimingActive = !!active; document.querySelector('[data-view="event"]').hidden=false; };
 function show(v){
   if(v === 'quickrace' && eventTimingActive){ v = 'event'; toast('Sesi Event sedang memakai timing'); }
   VIEWS.forEach(k => { const s = $('view-' + k); if(s) s.style.display = (k === v) ? '' : 'none'; });
